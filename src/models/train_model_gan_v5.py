@@ -92,19 +92,6 @@ def main(cuda, run_tag, random_seed):
     np.random.seed(random_seed)
     cudnn.benchmark = True
 
-    # todo: add this nice syntax
-    flags = Namespace(
-        train_file='oliver.txt',
-        seq_size=32,
-        batch_size=16,
-        embedding_size=64,
-        lstm_size=64,
-        gradients_norm=5,
-        initial_words=['I', 'am'],
-        predict_top_k=5,
-        checkpoint_path='checkpoint',
-    )
-
     lstm_size = 64
     loader_jobs = 4
     window_size = 30
@@ -124,7 +111,7 @@ def main(cuda, run_tag, random_seed):
     generator_train_prob = 0.8  # how frequently ignore the generator step. Note that the amount of total steps will be
     # equal to epochs * 83 batches * generator_train_prob, which is (1 - generator_train_prob) % less that for
     # discriminator
-    epochs = 200
+    epochs = 300
 
     # Create writer for tensorboard
     writer = SummaryWriter(temp_model_dir_tensorboard.name)
@@ -164,18 +151,8 @@ def main(cuda, run_tag, random_seed):
                                               drop_last=False)
 
     logger.info("Dataset done.")
-    # netD = CausalConvDiscriminator(input_size=trainset.features_count,
-    #                                n_layers=8, n_channel=10, kernel_size=8,
-    #                                dropout=0).to(device)
+ 
     netG = LSTMGenerator(in_dim=in_dim, out_dim=52, hidden_dim=256, n_layers=4).to(device)
-    # netG = CausalConvGenerator(noise_size=in_dim, output_size=52, n_layers=8, n_channel=150, kernel_size=8,
-    #                            dropout=0.2).to(device)
-
-    # nn.ConvTranspose2d()
-
-    # netD = CausalConvDiscriminatorMultitask(input_size=trainset.features_count,
-    #                                         n_layers=8, n_channel=150, class_count=trainset.class_count,
-    #                                         kernel_size=9, dropout=0.2).to(device)
 
     netD = CNN1D2DDiscriminatorMultitask(input_size=trainset.features_count, n_layers_1d=4, n_layers_2d=4,
                                          n_channel=trainset.features_count * 3, n_channel_2d=40,
@@ -188,7 +165,7 @@ def main(cuda, run_tag, random_seed):
     binary_criterion = nn.BCEWithLogitsLoss()
     cross_entropy_criterion = nn.CrossEntropyLoss()
     similarity = nn.MSELoss(reduction='mean')
-    # similarity = nn.L1Loss(reduction='sum')
+
 
     optimizerD = optim.Adam(netD.parameters(), lr=0.0002)
     optimizerG = optim.Adam(netG.parameters(), lr=0.0002)

@@ -2,6 +2,7 @@
 """
 Tennessee Eastman Process CSV 데이터 평가 스크립트
 학습된 GAN v5 모델을 사용하여 CSV 테스트 데이터 평가
+960 시점 테스트 데이터를 평균 풀링으로 500 시점으로 압축하여 평가
 """
 
 import os
@@ -19,6 +20,128 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 from src.data.dataset import TEP_MEAN, TEP_STD, CSVToTensor, CSVNormalize, TEPCSVDataset
+
+
+def average_pooling_1d(data, target_length):
+    """
+    1D 평균 풀링으로 시계열 데이터 압축
+    Args:
+        data: 원본 데이터 (timesteps, features)
+        target_length: 목표 길이
+    Returns:
+        compressed_data: 압축된 데이터 (target_length, features)
+    """
+    original_length = data.shape[0]
+    features = data.shape[1]
+    
+    # 구간 경계 계산 (균등 분할)
+    boundaries = np.linspace(0, original_length, target_length + 1)
+    
+    compressed_data = np.zeros((target_length, features))
+    
+    for i in range(target_length):
+        start_idx = int(boundaries[i])
+        end_idx = int(boundaries[i + 1])
+        
+        # 각 구간의 평균 계산
+        if start_idx == end_idx:
+            # 구간이 너무 좁은 경우 (거의 발생하지 않음)
+            compressed_data[i] = data[start_idx]
+        else:
+            compressed_data[i] = np.mean(data[start_idx:end_idx], axis=0)
+    
+    return compressed_data
+
+
+class TEPCSVDatasetCompressed(Dataset):
+    """
+    CSV 파일로부터 TEP 데이터를 로드하고 평균 풀링으로 압축하는 데이터셋
+    """
+    def __init__(self, csv_files, transform=None, is_test=False):
+        """
+        Args:
+            csv_files: CSV 파일 경로 리스트
+            transform: 데이터 변환 함수
+            is_test: 테스트 모드 여부 (960→500 압축 적용)
+        """
+        self.transform = transform
+        self.is_test = is_test
+        self.data = []
+        self.labels = []
+        
+        for csv_file in csv_files:
+            df = pd.read_csv(csv_file)
+            
+            # 시뮬레이션 런별로 그룹화
+            for sim_run in df['simulationRun'].unique():
+                run_data = df[df['simulationRun'] == sim_run]
+                
+                # 센서 데이터만 추출 (52개 센서)
+                sensor_data = run_data.iloc[:, 3:].values  # faultNumber, simulationRun, sample 제외
+                
+                # 테스트 데이터에서 960→500 시점으로 평균 풀링 압축
+                if is_test and sensor_data.shape[0] > 500:
+                    sensor_data = average_pooling_1d(sensor_data, 500)
+                
+                # 라벨 (결함 번호)
+                fault_label = run_data['faultNumber'].iloc[0]
+                
+                # 시계열 라벨링: 모든 시점에 동일한 라벨 적용
+                time_labels = np.full(len(sensor_data), fault_label)
+                
+                self.data.append(sensor_data)
+                self.labels.append(time_labels)
+        
+        self.data = np.array(self.data)
+        self.labels = np.array(self.labels)
+        
+        # 데이터 정보 출력
+        print(f"데이터 로드 완료: {len(self.data)}개 시뮬레이션 런")
+        print(f"데이터 형태: {self.data.shape}")
+        print(f"라벨 형태: {self.labels.shape}")
+        
+        if is_test:
+            print(f"평균 풀링 압축 적용: 960 → 500 시점 (모든 시점 정보 활용)")
+        
+        # 클래스 분포 확인
+        unique_labels = []
+        for label_seq in self.labels:
+            unique_labels.extend(label_seq)
+        unique_labels = np.array(unique_labels)
+        
+        print(f"\n클래스 분포:")
+        for i in range(max(unique_labels) + 1):
+            count = np.sum(unique_labels == i)
+            # 각 런의 첫 번째 시점 라벨로 런 개수 계산
+            first_labels = np.array([label[0] for label in self.labels])
+            runs = np.sum(first_labels == i)
+            if i == 0:
+                print(f"클래스 {i} (정상): {count:,} 샘플 ({runs}개 런)")
+            else:
+                print(f"클래스 {i} (결함{i}): {count:,} 샘플 ({runs}개 런)")
+        
+        # 특성 개수
+        self.features_count = self.data.shape[2]  # 52개 센서
+        self.class_count = len(np.unique(unique_labels))  # 클래스 개수
+        
+        print(f"\n데이터셋 정보:")
+        print(f"  - 특성 개수: {self.features_count}")
+        print(f"  - 클래스 개수: {self.class_count}")
+        print(f"  - 시점 수: {self.data.shape[1]}")
+    
+    def __len__(self):
+        return len(self.data)
+    
+    def __getitem__(self, idx):
+        sample = {
+            'shot': self.data[idx],
+            'label': self.labels[idx]
+        }
+        
+        if self.transform:
+            sample = self.transform(sample)
+        
+        return sample
 
 
 def setup_logger():
@@ -182,7 +305,7 @@ def plot_confusion_matrix(run_predictions, run_labels, save_path=None):
     
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
                 xticklabels=class_names, yticklabels=class_names)
-    plt.title('Tennessee Eastman Process Run-Level Fault Classification Confusion Matrix')
+    plt.title('Tennessee Eastman Process Run-Level Fault Classification\n(Average Pooling: 960→500 timesteps)')
     plt.xlabel('Predicted Class')
     plt.ylabel('Actual Class')
     plt.xticks(rotation=45)
@@ -204,9 +327,10 @@ def save_results(results, save_dir):
         os.makedirs(save_dir)
     
     # Save metrics
-    metrics_file = os.path.join(save_dir, 'evaluation_metrics_run_level.txt')
+    metrics_file = os.path.join(save_dir, 'evaluation_metrics_run_level_avgpool.txt')
     with open(metrics_file, 'w', encoding='utf-8') as f:
         f.write("Tennessee Eastman Process 런 단위 결함 탐지 평가 결과\n")
+        f.write("평균 풀링 압축 적용: 960 → 500 시점 (모든 시점 정보 활용)\n")
         f.write("=" * 50 + "\n\n")
         
         f.write(f"총 정답: {results['total_correct']}/{results['total_runs']} = {results['run_accuracy']:.4f}\n\n")
@@ -225,13 +349,13 @@ def save_results(results, save_dir):
         f.write(f"  평균 F1 점수: {results['avg_f1']:.4f}\n")
     
     # 런 단위 예측 결과 저장
-    pred_file = os.path.join(save_dir, 'run_predictions.npz')
+    pred_file = os.path.join(save_dir, 'run_predictions_avgpool.npz')
     np.savez(pred_file, 
              run_predictions=results['run_predictions'], 
              run_labels=results['run_labels'])
     
     # 런 단위 혼동 행렬 저장
-    cm_file = os.path.join(save_dir, 'confusion_matrix_run_level.png')
+    cm_file = os.path.join(save_dir, 'confusion_matrix_run_level_avgpool.png')
     plot_confusion_matrix(results['run_predictions'], results['run_labels'], cm_file)
     
     logger.info(f"런 단위 평가 결과 저장 완료: {save_dir}")
@@ -246,7 +370,10 @@ def save_results(results, save_dir):
 @click.option('--random_seed', type=int, default=42, help='랜덤 시드')
 def main(model_path, csv_dir, cuda, batch_size, save_dir, random_seed):
     """
-    Tennessee Eastman Process CSV 데이터 평가
+    Tennessee Eastman Process CSV 데이터 평가 (평균 풀링 압축 적용)
+    
+    테스트 데이터는 960 시점을 평균 풀링으로 500 시점으로 압축하여 평가합니다.
+    모든 시점의 정보를 활용하여 성능을 측정합니다.
     
     사용법:
     python src/models/evaluate_model_csv.py --model_path models/4_main_model/weights/199_epoch_discriminator.pth --cuda 0
@@ -254,7 +381,7 @@ def main(model_path, csv_dir, cuda, batch_size, save_dir, random_seed):
     
     # 로거 설정
     logger = setup_logger()
-    logger.info("Tennessee Eastman Process CSV 데이터 평가 시작")
+    logger.info("Tennessee Eastman Process CSV 데이터 평가 시작 (평균 풀링 압축 적용)")
     
     # 랜덤 시드 설정
     logger.info(f"Random Seed: {random_seed}")
@@ -283,9 +410,9 @@ def main(model_path, csv_dir, cuda, batch_size, save_dir, random_seed):
         CSVNormalize()
     ])
     
-    # 테스트 데이터셋 로드
+    # 테스트 데이터셋 로드 (평균 풀링 압축 적용)
     logger.info("CSV 데이터셋 로드 중...")
-    test_dataset = TEPCSVDataset(existing_files, transform=transform, is_test=True)
+    test_dataset = TEPCSVDatasetCompressed(existing_files, transform=transform, is_test=True)
     
     test_loader = DataLoader(
         test_dataset,
@@ -309,7 +436,7 @@ def main(model_path, csv_dir, cuda, batch_size, save_dir, random_seed):
     # 결과 저장
     save_results(results, save_dir)
     
-    logger.info("CSV 데이터 평가 완료!")
+    logger.info("CSV 데이터 평가 완료! (평균 풀링 압축 적용)")
 
 
 if __name__ == '__main__':
