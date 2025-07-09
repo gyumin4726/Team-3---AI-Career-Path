@@ -1,6 +1,11 @@
 # Tennessee Eastman Process 결함 탐지 - Temporal Deep Learning 모델
 
-Tennessee Eastman Process (TEP) 데이터셋을 사용한 화학공정 결함 탐지 시스템입니다. CNN1D2D+GAN 하이브리드 모델을 통해 21가지 결함 유형을 분류하고 시계열 데이터를 생성합니다.
+## 팀 정보
+**2025 AI 커리어패스 프로그램 - 팀3**
+- 국민대학교 박규민
+- 동양미래대학교 방석영
+- 세종대학교 엄태호
+- 한양여자대학교 조유영
 
 ## 프로젝트 개요
 
@@ -53,7 +58,6 @@ tennessee_eastman_diploma/
 │       └── test_fault_12.csv  # 결함 12 테스트 데이터
 ├── models/              # 훈련된 모델 저장소
 ├── setup.py             # 프로젝트 설정 파일
-└── .gitignore          # Git 무시 파일 목록
 ```
 
 ## 데이터셋 정보
@@ -88,7 +92,7 @@ conda activate tep_project
 # 2. 기본 과학 계산 패키지 설치
 conda install numpy pandas scipy matplotlib scikit-learn -y
 
-# 3. PyTorch 설치 (GPU 버전) - 중요!
+# 3. PyTorch 설치
 pip install torch==1.13.1 torchvision==0.14.1 torchaudio==0.13.1 --index-url https://download.pytorch.org/whl/cu117
 
 # 4. 기타 필수 패키지 설치
@@ -105,7 +109,7 @@ pip install -e .
 GAN v5 모델 훈련에는 다음 CSV 파일들이 필요합니다:
 
 ```bash
-# 훈련 데이터 (필수)
+# 훈련 데이터
 data/train_faults/
 ├── train_fault_0.csv  # 정상 운전 (18MB)
 ├── train_fault_1.csv  # 결함 1 (18MB)
@@ -113,7 +117,7 @@ data/train_faults/
 ├── ...
 └── train_fault_12.csv # 결함 12 (18MB)
 
-# 테스트 데이터 (평가용)
+# 테스트 데이터
 data/test_faults/
 ├── test_fault_0.csv   # 정상 운전 (34MB)
 ├── test_fault_1.csv   # 결함 1 (34MB)
@@ -131,10 +135,10 @@ data/test_faults/
 
 ### 3. 모델 훈련
 
-**메인 모델 훈련 (이것만 하면 됨!)**
+**메인 모델 훈련**
 
 ```bash
-# CNN1D2D+GAN 하이브리드 모델 (메인 모델) - CSV 데이터 사용
+# CNN1D2D+GAN 하이브리드 모델
 python -m src.models.train_model_gan_v5 --cuda 0 --run_tag main_model
 ```
 
@@ -214,7 +218,7 @@ errG_similarity = similarity(generated_data, real_inputs)
 
 #### 사용법
 ```bash
-# 학습 완료된 discriminator 모델 평가
+# 학습 완료된 discriminator 모델 평가 (결함 분류)
 python -m src.models.evaluate_model_csv --model_path models/5_main_model/weights/199_epoch_discriminator.pth --cuda 0
 ```
 
