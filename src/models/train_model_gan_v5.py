@@ -16,9 +16,6 @@ from src.data.dataset import TEPCSVDataset, CSVToTensor, CSVNormalize, InverseNo
 from src.models.utils import get_latest_model_id
 from src.models.recurrent_models import TEPRNN, LSTMGenerator
 from src.models.convolutional_models import (
-    CausalConvDiscriminator,
-    CausalConvGenerator,
-    CausalConvDiscriminatorMultitask,
     CNN1D2DDiscriminatorMultitask
 )
 import torch.backends.cudnn as cudnn
