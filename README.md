@@ -31,8 +31,8 @@ tennessee_eastman_diploma/
 │   ├── models/            # 딥러닝 모델 구현
 │   │   ├── convolutional_models.py    # TCN, CNN1D2D 모델
 │   │   ├── recurrent_models.py        # LSTM 기반 모델
-│   │   ├── train_model_gan_v5.py      # GAN v5 모델 훈련 (메인)
-│   │   ├── evaluate_model_csv.py      # 모델 평가 스크립트
+│   │   ├── train_model.py      # GAN v5 모델 훈련 (메인)
+│   │   ├── evaluate_model.py      # 모델 평가 스크립트
 │   │   └── utils.py                   # 유틸리티 함수
 ├── data/                # 데이터셋 저장소
 │   ├── train_faults/    # 훈련용 CSV 파일들
@@ -130,7 +130,7 @@ data/test_faults/
 
 ```bash
 # CNN1D2D+GAN 하이브리드 모델
-python -m src.models.train_model_gan_v5 --cuda 0 --run_tag main_model
+python -m src.models.train_model --cuda 0 --run_tag main_model
 ```
 
 이 하나의 명령으로 전체 시스템이 완성됩니다:
@@ -210,7 +210,7 @@ errG_similarity = similarity(generated_data, real_inputs)
 #### 사용법
 ```bash
 # 학습 완료된 discriminator 모델 평가 (결함 분류)
-python -m src.models.evaluate_model_csv --model_path models/5_main_model/weights/199_epoch_discriminator.pth --cuda 0
+python -m src.models.evaluate_model --model_path models/5_main_model/weights/199_epoch_discriminator.pth --cuda 0
 ```
 
 #### 파라미터 설명
