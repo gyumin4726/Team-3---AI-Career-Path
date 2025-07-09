@@ -28,22 +28,13 @@ tennessee_eastman_diploma/
 ├── src/
 │   ├── data/              # 데이터 처리 및 로딩
 │   │   ├── dataset.py     # TEP 데이터셋 클래스들
-│   │   └── make_dataset.py
 │   ├── models/            # 딥러닝 모델 구현
 │   │   ├── convolutional_models.py    # TCN, CNN1D2D 모델
 │   │   ├── recurrent_models.py        # LSTM 기반 모델
-│   │   ├── train_model.py             # 기본 CNN 분류기 훈련
 │   │   ├── train_model_gan_v5.py      # GAN v5 모델 훈련 (메인)
 │   │   ├── evaluate_model_csv.py      # 모델 평가 스크립트
 │   │   └── utils.py                   # 유틸리티 함수
-│   └── visualization/     # 시각화
-│       └── visualize.py   # 시각화 스크립트
 ├── data/                # 데이터셋 저장소
-│   ├── raw/             # 원본 RData 파일 위치
-│   │   ├── TEP_FaultFree_Training.RData
-│   │   ├── TEP_Faulty_Training.RData  
-│   │   ├── TEP_FaultFree_Testing.RData
-│   │   └── TEP_Faulty_Testing.RData
 │   ├── train_faults/    # 훈련용 CSV 파일들
 │   │   ├── train_fault_0.csv  # 정상 운전 데이터
 │   │   ├── train_fault_1.csv  # 결함 1 데이터
