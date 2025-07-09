@@ -376,7 +376,7 @@ def main(model_path, csv_dir, cuda, batch_size, save_dir, random_seed):
     모든 시점의 정보를 활용하여 성능을 측정합니다.
     
     사용법:
-    python src/models/evaluate_model_csv.py --model_path models/4_main_model/weights/199_epoch_discriminator.pth --cuda 0
+    python src/models/evaluate_model.py --model_path models/4_main_model/weights/199_epoch_discriminator.pth --cuda 0
     """
     
     # 로거 설정
