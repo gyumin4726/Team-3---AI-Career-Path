@@ -18,6 +18,7 @@ from sklearn.metrics import classification_report, confusion_matrix, accuracy_sc
 from sklearn.metrics import precision_recall_fscore_support
 import seaborn as sns
 import matplotlib.pyplot as plt
+from collections import Counter
 
 from src.data.dataset import TEP_MEAN, TEP_STD, CSVToTensor, CSVNormalize, TEPCSVDataset
 
@@ -169,43 +170,63 @@ def load_model(model_path, device):
     return model
 
 
-def evaluate_model(model, test_loader, device, logger):
-    """모델 평가 수행"""
-    logger.info("모델 평가 시작...")
+def evaluate_model(model, test_loader, device):
+    """
+    모델 평가 함수
     
+    Args:
+        model: 평가할 모델
+        test_loader: 테스트 데이터 로더
+        device: 연산 장치 (CPU/GPU)
+        
+    Returns:
+        accuracy: 전체 시뮬레이션에 대한 정확도
+        predictions: 시뮬레이션별 예측 결과
+        true_labels: 시뮬레이션별 실제 라벨
+    """
     model.eval()
-    all_predictions = []
-    all_labels = []
-    all_probabilities = []
+    predictions_by_sim = {}  # 시뮬레이션별 예측값 저장
+    labels_by_sim = {}      # 시뮬레이션별 실제 라벨 저장
     
     with torch.no_grad():
-        for batch_idx, data in enumerate(test_loader):
-            inputs = data["shot"].to(device)
-            labels = data["label"].to(device)
-            
-            # 입력 형태 조정
-            inputs = inputs.squeeze(dim=1)  # [batch, seq_len, features]
-            labels = labels.squeeze()       # [batch, seq_len]
+        for batch in test_loader:
+            inputs = batch["shot"].to(device)
+            labels = batch["label"].to(device)
+            sim_indices = batch["sim_idx"]
             
             # 모델 예측
-            type_logits, real_fake_logits = model(inputs, None)
+            outputs = model(inputs)
+            batch_preds = torch.argmax(outputs, dim=1)
             
-            # 확률 계산
-            probabilities = torch.softmax(type_logits, dim=-1)
+            # CPU로 이동하고 numpy로 변환
+            batch_preds = batch_preds.cpu().numpy()
+            batch_labels = labels.cpu().numpy()
             
-            # 예측 값 계산
-            predictions = torch.argmax(type_logits, dim=-1)
-            
-            # 배치 데이터 저장
-            all_predictions.extend(predictions.cpu().numpy())
-            all_labels.extend(labels.cpu().numpy())
-            all_probabilities.extend(probabilities.cpu().numpy())
-            
-            if batch_idx % 10 == 0:
-                logger.info(f"평가 진행률: {batch_idx + 1}/{len(test_loader)}")
+            # 시뮬레이션별로 예측값 수집
+            for pred, label, sim_idx in zip(batch_preds, batch_labels, sim_indices):
+                if sim_idx not in predictions_by_sim:
+                    predictions_by_sim[sim_idx] = []
+                    labels_by_sim[sim_idx] = label[0]  # 각 시뮬레이션의 라벨은 동일
+                predictions_by_sim[sim_idx].append(pred)
     
-    logger.info("모델 평가 완료")
-    return np.array(all_predictions), np.array(all_labels), np.array(all_probabilities)
+    # 각 시뮬레이션별로 majority voting 수행
+    final_predictions = []
+    final_labels = []
+    
+    for sim_idx in sorted(predictions_by_sim.keys()):
+        # Majority voting으로 최종 예측
+        final_pred = Counter(predictions_by_sim[sim_idx]).most_common(1)[0][0]
+        final_predictions.append(final_pred)
+        final_labels.append(labels_by_sim[sim_idx])
+    
+    # numpy 배열로 변환
+    final_predictions = np.array(final_predictions)
+    final_labels = np.array(final_labels)
+    
+    # 정확도 계산
+    accuracy = (final_predictions == final_labels).mean()
+    
+    return accuracy, final_predictions, final_labels
 
 
 def analyze_results(predictions, labels, logger):
@@ -428,7 +449,7 @@ def main(model_path, csv_dir, cuda, batch_size, save_dir, random_seed):
     model = load_model(model_path, device)
     
     # 모델 평가
-    predictions, labels, probabilities = evaluate_model(model, test_loader, device, logger)
+    accuracy, predictions, labels = evaluate_model(model, test_loader, device)
     
     # 결과 분석
     results = analyze_results(predictions, labels, logger)
