@@ -1,0 +1,2 @@
+2025-07-11 00:13:54,644 - __main__ - INFO - Training begin on cpu
+2025-07-11 00:13:54,644 - __main__ - INFO - Tmp TB dir logs\1_npy_fixed_labels_tmp_z726k7ml, tmp model dir models\1_npy_fixed_labels_tmp_oq4bmkun

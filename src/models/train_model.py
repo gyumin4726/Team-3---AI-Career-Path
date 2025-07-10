@@ -96,7 +96,7 @@ def main(cuda, run_tag, random_seed):
     
     # NPY 파일 경로 설정
     train_data_path = "data/train_X.npy"
-    train_labels_path = "data/train_Y.npy"
+    train_labels_path = "data/train_intY.npy"
 
     noise_size = 100
     conditioning_size = 1
@@ -152,7 +152,7 @@ def main(cuda, run_tag, random_seed):
     netG = LSTMGenerator(in_dim=in_dim, out_dim=52, hidden_dim=256, n_layers=4).to(device)
 
     netD = CNN1D2DDiscriminatorMultitask(input_size=trainset.features_count, n_layers_1d=4, n_layers_2d=4,
-                                         n_channel=trainset.features_count * 3, n_channel_2d=40,
+                                         n_channel=trainset.features_count * 3, n_channel_2d=100,
                                          class_count=trainset.class_count,
                                          kernel_size=9, dropout=0.2, groups=trainset.features_count).to(device)
 
@@ -182,7 +182,21 @@ def main(cuda, run_tag, random_seed):
             sim_indices = data["sim_idx"].to(device)
 
             real_inputs = real_inputs.squeeze(dim=1)
-            fault_labels = fault_labels.squeeze()
+            fault_labels = fault_labels.squeeze()  # shape: (batch_size,)
+            
+            # 각 시퀀스의 모든 시점에 대해 같은 라벨 사용
+            fault_labels_seq = fault_labels.unsqueeze(1).expand(-1, real_inputs.size(1))  # shape: (batch_size, seq_len)
+            # 시뮬레이션 인덱스도 시퀀스 길이만큼 확장
+            sim_indices_seq = sim_indices.unsqueeze(1).expand(-1, real_inputs.size(1))  # shape: (batch_size, seq_len)
+
+            # 디버깅: 라벨 정보 출력
+            if i == 0:  # 각 에폭의 첫 번째 배치에서만 출력
+                logger.info(f"\n[Epoch {epoch}] Label 디버깅:")
+                logger.info(f"fault_labels shape: {fault_labels.shape}")
+                logger.info(f"fault_labels 고유값: {torch.unique(fault_labels).cpu().numpy()}")
+                logger.info(f"첫 번째 배치 라벨 분포:\n{torch.bincount(fault_labels.long()).cpu().numpy()}")
+                logger.info(f"sim_indices shape: {sim_indices.shape}")
+                logger.info(f"sim_indices 범위: [{sim_indices.min().item()}, {sim_indices.max().item()}]")
 
             netD.zero_grad()
 
@@ -194,24 +208,41 @@ def main(cuda, run_tag, random_seed):
             # real_target = (0.74 - 1.0) - torch.rand(batch_size, seq_len, 1, device=device) + 1.0
 
             # 시뮬레이션 인덱스를 조건으로 추가
-            type_logits, fake_logits = netD(real_inputs, sim_indices)
+            type_logits, fake_logits = netD(real_inputs, sim_indices_seq)
             errD_real = binary_criterion(fake_logits, real_target)
-            errD_type_real = cross_entropy_criterion(type_logits.transpose(1, 2), fault_labels)
+            errD_type_real = cross_entropy_criterion(type_logits.transpose(1, 2), fault_labels_seq)
+
+            # 디버깅: Discriminator 출력 확인
+            if i == 0:  # 각 에폭의 첫 번째 배치에서만 출력
+                logger.info(f"\nDiscriminator 출력 디버깅:")
+                logger.info(f"type_logits shape: {type_logits.shape}")
+                logger.info(f"fault_labels_seq shape: {fault_labels_seq.shape}")
+                logger.info(f"sim_indices_seq shape: {sim_indices_seq.shape}")
+                logger.info(f"type_logits 예측 분포:\n{torch.argmax(type_logits, dim=2)[0].cpu().numpy()[:10]}")  # 첫 번째 시퀀스의 처음 10개 예측값
+                logger.info(f"실제 라벨:\n{fault_labels_seq[0].cpu().numpy()[:10]}")  # 첫 번째 시퀀스의 처음 10개 라벨
 
             errD_complex_real = real_fake_w_d * errD_real + fault_type_w_d * errD_type_real
             errD_complex_real.backward()
-            # here is missed sigmoid function
             D_x = type_logits.mean().item()
 
             # Fake data training
             noise = torch.randn(batch_size, seq_len, noise_size, device=device)
-            random_labels = torch.randint(high=trainset.class_count, size=(batch_size, 1, 1),
-                                          dtype=torch.float32, device=device)
-            random_labels = random_labels.repeat(1, seq_len, 1)
-            random_labels[:, :20, :] = 0
+            # 랜덤 라벨 생성 (0부터 class_count-1 사이의 정수)
+            random_labels = torch.randint(high=trainset.class_count, size=(batch_size,), device=device)
+            # 각 시퀀스의 모든 시점에 대해 같은 랜덤 라벨 사용
+            random_labels_seq = random_labels.unsqueeze(1).expand(-1, seq_len)
 
-            # 시뮬레이션 인덱스도 Generator의 입력으로 사용
-            noise = torch.cat((noise, random_labels, sim_indices.unsqueeze(-1).float()), dim=2)
+            # 디버깅: 랜덤 라벨 확인
+            if i == 0:  # 각 에폭의 첫 번째 배치에서만 출력
+                logger.info(f"\n랜덤 라벨 디버깅:")
+                logger.info(f"random_labels shape: {random_labels.shape}")
+                logger.info(f"random_labels_seq shape: {random_labels_seq.shape}")
+                logger.info(f"random_labels 고유값: {torch.unique(random_labels).cpu().numpy()}")
+                logger.info(f"random_labels 분포:\n{torch.bincount(random_labels).cpu().numpy()}")
+
+            # 시뮬레이션 인덱스도 Generator의 입력으로 사용 (3차원으로 확장)
+            sim_indices_3d = sim_indices_seq.unsqueeze(-1).float()  # shape: (batch_size, seq_len, 1)
+            noise = torch.cat((noise, sim_indices_3d), dim=2)
 
             state_h, state_c = netG.zero_state(batch_size)
             state_h, state_c = state_h.to(device), state_c.to(device)
@@ -221,9 +252,9 @@ def main(cuda, run_tag, random_seed):
             # for  label smoothing on [0.0, 0.3]
             # fake_target = (0.0 - 0.3) - torch.rand(batch_size, seq_len, 1, device=device) + 0.3
             # WARNING: do not forget about detach!
-            type_logits, fake_logits = netD(fake_inputs.detach(), sim_indices)
+            type_logits, fake_logits = netD(fake_inputs.detach(), sim_indices_seq)
             errD_fake = binary_criterion(fake_logits, fake_target)
-            errD_type_fake = cross_entropy_criterion(type_logits.transpose(1, 2), random_labels.long().squeeze())
+            errD_type_fake = cross_entropy_criterion(type_logits.transpose(1, 2), random_labels_seq)
 
             errD_complex_fake = real_fake_w_d * errD_fake + fault_type_w_d * errD_type_fake
             errD_complex_fake.backward()
@@ -249,7 +280,7 @@ def main(cuda, run_tag, random_seed):
             if g_coin:
                 netG.zero_grad()
 
-                type_logits, fake_logits = netD(fake_inputs, None)
+                type_logits, fake_logits = netD(fake_inputs, sim_indices_seq)
                 errG = real_fake_w_g * binary_criterion(fake_logits, real_target)
                 errG.backward()
                 D_G_z2 = fake_logits.mean().item()

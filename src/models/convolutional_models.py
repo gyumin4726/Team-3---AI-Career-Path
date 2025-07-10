@@ -92,30 +92,32 @@ class TemporalConvNet2D(nn.Module):
     def forward(self, x):
         return self.net(x)
 
-
 class CNN1D2DDiscriminatorMultitask(nn.Module):
     def __init__(self, input_size, n_layers_1d, n_layers_2d, n_channel, n_channel_2d, class_count, kernel_size, dropout=0, groups=1):
         super(CNN1D2DDiscriminatorMultitask, self).__init__()
         # Assuming same number of channels layerwise
         num_channels = [n_channel] * n_layers_1d
         self.tcn = TemporalConvNet(input_size, num_channels, kernel_size=kernel_size, dropout=dropout, groups=groups)
-        self.ccn = TemporalConvNet2D(1, n_channel_2d, kernel_size=5, dropout=dropout)
+        self.ccn = TemporalConvNet2D(1, n_channel_2d, kernel_size=3, dropout=dropout)
         self.n_channel_2d = n_channel_2d
 
-        self.fault_type_head_fc1 = nn.Linear(self.n_channel_2d * 111 * 25 // 500, 128)
+        self.fault_type_head_fc1 = nn.Linear(self.n_channel_2d * 6 * 32 // 50, 128)
         self.fault_type_head_fc2 = nn.Linear(128, 32)
         self.fault_type_head_fc3 = nn.Linear(32, class_count)
 
-        self.real_fake_head_fc1 = nn.Linear(self.n_channel_2d * 111 * 25 // 500, 64)
+        self.real_fake_head_fc1 = nn.Linear(self.n_channel_2d * 6 * 32 // 50, 64)
         self.real_fake_head_fc2 = nn.Linear(64, 1)
 
         self.activation = nn.LeakyReLU(0.1)
 
     def forward(self, x, _, channel_last=True):
+        print(f"Input x shape: {x.shape}")
         common = self.tcn(x.transpose(1, 2) if channel_last else x).transpose(1, 2)
+        print(f"After TCN shape: {common.shape}")
         common = common.unsqueeze(1)
+        print(f"After unsqueeze shape: {common.shape}")
         common = self.ccn(common)
-        common = common.view(-1, 500, self.n_channel_2d * 111 * 25 // 500)
+        common = common.view(-1, 50, self.n_channel_2d * 6 * 32 // 50)
         type_logits = self.activation(self.fault_type_head_fc1(common))
         type_logits = self.activation(self.fault_type_head_fc2(type_logits))
         type_logits = self.fault_type_head_fc3(type_logits)
