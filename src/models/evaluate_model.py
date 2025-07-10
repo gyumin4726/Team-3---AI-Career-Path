@@ -69,23 +69,23 @@ def evaluate_model(model, test_loader, device):
         for batch in test_loader:
             inputs = batch["shot"].to(device)
             labels = batch["label"].to(device)
-            sim_indices = batch["sim_idx"].to(device)  # 학습 시와 동일하게 처리
+            sim_indices = batch["sim_idx"].to(device)
             
-            # 모델 예측 (train과 동일하게 sim_indices 사용)
+            # 모델 예측
             type_logits, _ = model(inputs, sim_indices)
-            type_logits = type_logits.transpose(1, 2)  # train과 동일한 형식으로 변경
-            batch_preds = torch.argmax(type_logits, dim=1)  # (batch_size, n_classes, seq_len) -> (batch_size, seq_len)
+            type_logits = type_logits.transpose(1, 2)
+            batch_preds = torch.argmax(type_logits, dim=1)
             
             # CPU로 이동하고 numpy로 변환
             batch_preds = batch_preds.cpu().numpy()
             batch_labels = labels.cpu().numpy()
+            sim_indices = sim_indices.cpu().numpy()
             
             # 시뮬레이션별로 예측값 수집
-            sim_idx = batch["sim_idx"].cpu().numpy() if "sim_idx" in batch else np.arange(len(batch_preds))
-            for i, (pred, label, idx) in enumerate(zip(batch_preds, batch_labels, sim_idx)):
+            for i, (pred, label, idx) in enumerate(zip(batch_preds, batch_labels, sim_indices)):
                 if idx not in predictions_by_sim:
                     predictions_by_sim[idx] = []
-                    labels_by_sim[idx] = label[0]  # 각 시뮬레이션의 라벨은 동일
+                    labels_by_sim[idx] = label  # label이 이미 스칼라값이므로 인덱싱 제거
                 predictions_by_sim[idx].extend(pred)
     
     # 각 시뮬레이션별로 majority voting 수행
@@ -156,17 +156,21 @@ def plot_confusion_matrix(run_predictions, run_labels, save_path=None):
     plt.figure(figsize=(12, 10))
     cm = confusion_matrix(run_labels, run_predictions)
     
+    # 정확도 계산
+    accuracy = np.sum(np.diag(cm)) / np.sum(cm)
+    print(f"\n정확도: {accuracy:.4f}")
+    
     # 클래스 라벨 생성
-    classes = [f"정상" if i == 0 else f"결함{i}" for i in range(len(np.unique(run_labels)))]
+    classes = [f"FaultFree" if i == 0 else f"Fault{i}" for i in range(len(np.unique(run_labels)))]
     
     # 히트맵 생성
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
                 xticklabels=classes,
                 yticklabels=classes)
     
-    plt.title('혼동 행렬')
-    plt.xlabel('예측')
-    plt.ylabel('실제')
+    plt.title('Confusion Matrix')
+    plt.xlabel('Predicted Label')
+    plt.ylabel('True Label')
     
     if save_path:
         plt.savefig(save_path)
@@ -194,8 +198,8 @@ def save_results(results, save_dir):
 
 @click.command()
 @click.option('--model_path', required=True, type=str, help='학습된 discriminator 모델 경로 (.pth 파일)')
-@click.option('--test_data', type=str, default='data/test_data.npy', help='테스트 데이터 NPY 파일 경로')
-@click.option('--test_labels', type=str, default='data/test_labels.npy', help='테스트 라벨 NPY 파일 경로')
+@click.option('--test_data', type=str, default='data/test_X_small.npy', help='테스트 데이터 NPY 파일 경로')
+@click.option('--test_labels', type=str, default='data/test_intY_small.npy', help='테스트 라벨 NPY 파일 경로')
 @click.option('--cuda', type=int, default=0, help='사용할 GPU 번호')
 @click.option('--batch_size', type=int, default=16, help='배치 크기')
 @click.option('--save_dir', type=str, default='evaluation_results', help='결과 저장 디렉토리')
@@ -204,6 +208,9 @@ def main(model_path, test_data, test_labels, cuda, batch_size, save_dir, random_
     """
     모델 평가 메인 함수
     """
+    # 저장 디렉토리 생성
+    os.makedirs(save_dir, exist_ok=True)
+    
     # 랜덤 시드 설정
     random.seed(random_seed)
     torch.manual_seed(random_seed)
