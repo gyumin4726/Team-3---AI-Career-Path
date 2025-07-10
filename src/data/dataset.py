@@ -349,10 +349,14 @@ class InverseNormalize(object):
 class CSVToTensor(object):
     """시계열 데이터를 위한 텐서 변환"""
     def __call__(self, sample):
-        shot, label = sample['shot'], sample['label']
+        shot = torch.from_numpy(sample['shot']).float()
+        label = torch.from_numpy(sample['label']).long()
+        sim_idx = sample['sim_idx']  # 정수 그대로 유지
+        
         return {
-            'shot': torch.from_numpy(shot).float(),
-            'label': torch.from_numpy(label).long()
+            'shot': shot,
+            'label': label,
+            'sim_idx': sim_idx
         }
 
 
@@ -471,36 +475,54 @@ class TEPNPYDataset(Dataset):
     def __init__(self, data_path, labels_path, transform=None):
         """
         Args:
-            data_path (str): Path to the NPY data file (shape: 6500, n, 50, 52)
-            labels_path (str): Path to the NPY labels file (shape: 6500, n, 1)
-            transform (callable, optional): Optional transform to be applied on a sample
+            data_path (str): Path to the NPY data file (shape: N, 50, 52)
+            labels_path (str): Path to the NPY labels file (shape: N, 13)
+            transform (callable, optional): Optional transform to be applied on a sample.
+                                         Note: Data is already normalized using StandardScaler
         """
-        self.data = np.load(data_path)  # shape: (6500, n, 50, 52)
-        self.labels = np.load(labels_path)  # shape: (6500, n, 1)
+        self.data = np.load(data_path)  # shape: (N, 50, 52)
+        self.labels = np.load(labels_path)  # shape: (N, 13)
         self.transform = transform
         
         self.features_count = self.data.shape[-1]  # 52
-        self.class_count = 13  # 0-12 fault types including normal
-        self.seq_length = self.data.shape[2]  # 50 (window size)
-        self.slides_per_sim = self.data.shape[1]  # n (이미 계산된 슬라이드 수)
+        self.class_count = self.labels.shape[-1]  # 13
         
-        # 시뮬레이션 인덱스 생성 (6500개 시뮬레이션 각각에 대해 n번 반복)
-        self.sim_indices = np.repeat(np.arange(len(self.data)), self.slides_per_sim)
+        # 시뮬레이션 인덱스 계산
+        # 한 시뮬레이션은 500 시점이 있고, 윈도우 크기 50, 스트라이드 10으로 슬라이딩하면
+        # 한 시뮬레이션당 46개의 윈도우가 생성됨
+        # 따라서 데이터 인덱스를 46으로 나눈 몫이 시뮬레이션 인덱스가 됨
+        self.simulation_indices = np.arange(len(self.data)) // 46
+        
+        # 데이터셋 정보 출력
+        total_windows = len(self.data)
+        n_simulations = total_windows // 46
+        remainder = total_windows % 46
+        
+        print(f"\nNPY 데이터셋 정보:")
+        print(f"- 데이터 shape: {self.data.shape}")
+        print(f"- 라벨 shape: {self.labels.shape}")
+        print(f"- 특성 수: {self.features_count}")
+        print(f"- 클래스 수: {self.class_count}")
+        print(f"- 총 윈도우 수: {total_windows}")
+        print(f"- 총 시뮬레이션 수: {n_simulations}")
+        print(f"- 시뮬레이션당 윈도우 수: 46 (window=50, stride=10)")
+        if remainder > 0:
+            print(f"- 경고: 마지막 시뮬레이션은 {remainder}개의 윈도우만 있음")
+        print(f"- 데이터는 이미 StandardScaler로 정규화되어 있음")
         
     def __len__(self):
-        return len(self.data) * self.slides_per_sim
+        return len(self.data)
         
     def __getitem__(self, idx):
-        sim_idx = self.sim_indices[idx]
-        slide_idx = idx % self.slides_per_sim
-        
         sample = {
-            "shot": torch.FloatTensor(self.data[sim_idx, slide_idx:slide_idx+1]),  # (1, 50, 52)
-            "label": torch.LongTensor(self.labels[sim_idx, slide_idx:slide_idx+1]),  # (1, 1)
-            "sim_idx": sim_idx  # 시뮬레이션 구분을 위한 인덱스
+            "shot": self.data[idx],  # (50, 52)
+            "label": self.labels[idx],  # (13,)
+            "sim_idx": self.simulation_indices[idx]  # 시뮬레이션 구분을 위한 인덱스
         }
         
         if self.transform:
+            # transform은 주로 numpy → torch 변환만 수행
+            # 데이터는 이미 정규화되어 있으므로 추가 정규화 하지 않음
             sample = self.transform(sample)
             
         return sample

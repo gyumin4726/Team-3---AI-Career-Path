@@ -91,19 +91,16 @@ def main(cuda, run_tag, random_seed):
 
     lstm_size = 64
     loader_jobs = 4
-    window_size = 30
+    window_size = 50
     bs = 128
     
     # NPY 파일 경로 설정
-    train_data_path = "data/train_data.npy"
-    train_labels_path = "data/train_labels.npy"
-    test_data_path = "data/test_data.npy"
-    test_labels_path = "data/test_labels.npy"
+    train_data_path = "data/train_X.npy"
+    train_labels_path = "data/train_Y.npy"
 
     noise_size = 100
     conditioning_size = 1
     in_dim = noise_size + conditioning_size
-    fault_type_classifier_weights = "models/2/latest.pth"
     checkpoint_every = 10
     real_fake_w_d = 1.0  # weight for real fake in loss
     fault_type_w_d = 0.8  # weight for fault type term in loss
@@ -119,10 +116,9 @@ def main(cuda, run_tag, random_seed):
     # todo: add all running options to some structure and print them.
     writer.add_text('Options', str("Here yo can write running options or put your ads."), 0)
 
-    # 데이터 변환 설정 (항상 CSV 사용)
+    # 데이터 변환 설정 (NPY 데이터는 이미 정규화되어 있음)
     transform = transforms.Compose([
-        CSVToTensor(),
-        CSVNormalize()
+        CSVToTensor()
     ])
 
     inverse_transform = InverseNormalize()
