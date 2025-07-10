@@ -225,7 +225,8 @@ def main(model_path, test_data, test_labels, cuda, batch_size, save_dir, random_
     test_dataset = TEPNPYDataset(
         data_path=test_data,
         labels_path=test_labels,
-        transform=transform
+        transform=transform,
+        is_test=True  # 테스트 데이터는 960 시점
     )
     
     # 데이터 로더 생성
@@ -235,6 +236,29 @@ def main(model_path, test_data, test_labels, cuda, batch_size, save_dir, random_
         shuffle=False,
         num_workers=4
     )
+    
+    # 데이터셋 상세 정보 확인
+    logger.info("\n데이터셋 상세 정보:")
+    
+    # 첫 번째 배치 가져오기
+    first_batch = next(iter(test_loader))
+    logger.info(f"배치 데이터 shape: {first_batch['shot'].shape}")  # [batch_size, 50, 52]
+    logger.info(f"배치 라벨 shape: {first_batch['label'].shape}")   # [batch_size, 13]
+    logger.info(f"배치 시뮬레이션 인덱스 shape: {first_batch['sim_idx'].shape}")  # [batch_size]
+    
+    # 시뮬레이션 인덱스 분포 확인
+    sim_indices = first_batch['sim_idx'].numpy()
+    unique_sims = np.unique(sim_indices)
+    logger.info(f"\n시뮬레이션 인덱스 정보:")
+    logger.info(f"배치 내 고유 시뮬레이션 수: {len(unique_sims)}")
+    logger.info(f"시뮬레이션 인덱스 범위: {sim_indices.min()} ~ {sim_indices.max()}")
+    
+    # 첫 번째 배치의 일부 데이터 출력
+    logger.info("\n첫 번째 배치 샘플 (처음 5개):")
+    for i in range(min(5, len(sim_indices))):
+        logger.info(f"샘플 {i}:")
+        logger.info(f"  - 시뮬레이션 인덱스: {sim_indices[i]}")
+        logger.info(f"  - 라벨: {first_batch['label'][i].argmax().item()}")  # 원-핫 인코딩된 라벨의 클래스
     
     # 모델 로드
     model = load_model(model_path, device)

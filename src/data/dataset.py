@@ -176,7 +176,7 @@ class TEPDatasetV4(Dataset):
         self.max_sim_run_number = int(self.df.simulationRun.max())
         self.print_sim_run = randint(0, self.max_sim_run_number - 1)
         """
-        This is for selecting the proper indices in row_data so the data set contains the only batch 
+        This is for selecting the proper indices in row_data so the data set contains the only batch
         of len self.class_count where each fault type occurs exactly once.
         """
         self.print_ids = [ft * self.max_sim_run_number + self.print_sim_run for ft in range(self.class_count)]
@@ -347,12 +347,20 @@ class InverseNormalize(object):
 
 
 class CSVToTensor(object):
-    """시계열 데이터를 위한 텐서 변환"""
+    """Convert ndarrays in sample to Tensors."""
+
     def __call__(self, sample):
+        """
+        Args:
+            sample (dict): {'shot': ndarray, 'label': int/ndarray, 'sim_idx': int}
+        Returns:
+            dict: {'shot': torch.FloatTensor, 'label': torch.LongTensor, 'sim_idx': torch.LongTensor}
+        """
         shot = torch.from_numpy(sample['shot']).float()
-        label = torch.from_numpy(sample['label']).long()
-        sim_idx = sample['sim_idx']  # 정수 그대로 유지
-        
+        # int나 numpy.int64를 모두 처리할 수 있도록 수정
+        label = torch.tensor(sample['label'], dtype=torch.long)
+        sim_idx = torch.tensor(sample['sim_idx'], dtype=torch.long)
+
         return {
             'shot': shot,
             'label': label,
@@ -386,46 +394,46 @@ class TEPCSVDataset(Dataset):
         self.is_test = is_test
         self.data = []
         self.labels = []
-        
+
         for csv_file in csv_files:
             df = pd.read_csv(csv_file)
-            
+
             # 시뮬레이션 런별로 그룹화
             for sim_run in df['simulationRun'].unique():
                 run_data = df[df['simulationRun'] == sim_run]
-                
+
                 # 센서 데이터만 추출 (52개 센서)
                 sensor_data = run_data.iloc[:, 3:].values  # faultNumber, simulationRun, sample 제외
-                
+
                 # 테스트 데이터에서 960→500 시점으로 자르기 (모델이 500 시점으로 훈련됨)
                 if is_test and sensor_data.shape[0] > 500:
                     sensor_data = sensor_data[-500:]  # 마지막 500 시점 사용 (결함 발생 후 구간)
-                
+
                 # 라벨 (결함 번호)
                 fault_label = run_data['faultNumber'].iloc[0]
-                
+
                 # 시계열 라벨링: CSV 파일은 전체 시뮬레이션이 해당 결함 유형
                 # 각 파일의 모든 런은 동일한 라벨을 가짐
                 time_labels = np.full(len(sensor_data), fault_label)
-                
+
                 self.data.append(sensor_data)
                 self.labels.append(time_labels)
-        
+
         self.data = np.array(self.data)
         self.labels = np.array(self.labels)
-        
+
         # 데이터 정보 출력
         expected_timesteps = 960 if is_test else 500
         print(f"데이터 로드 완료: {len(self.data)}개 시뮬레이션 런")
         print(f"데이터 형태: {self.data.shape} (예상: {len(self.data)}×{expected_timesteps}×52)")
         print(f"라벨 형태: {self.labels.shape}")
-        
+
         # 클래스 분포 확인
         unique_labels = []
         for label_seq in self.labels:
             unique_labels.extend(label_seq)
         unique_labels = np.array(unique_labels)
-        
+
         print(f"\n클래스 분포:")
         for i in range(max(unique_labels) + 1):
             count = np.sum(unique_labels == i)
@@ -435,95 +443,95 @@ class TEPCSVDataset(Dataset):
                 print(f"클래스 {i} (정상): {count:,} 샘플 ({runs}개 런 × {timesteps} 시점)")
             else:
                 print(f"클래스 {i} (결함{i}): {count:,} 샘플 ({runs}개 런 × {timesteps} 시점)")
-        
+
         print(f"\n라벨링 규칙:")
         print(f"  - train_fault_0.csv → 모든 시점 라벨 0 (정상)")
         print(f"  - train_fault_1.csv → 모든 시점 라벨 1 (결함1)")
         print(f"  - train_fault_2.csv → 모든 시점 라벨 2 (결함2)")
         print(f"  - ... (각 CSV 파일 = 해당 결함 유형의 순수 시뮬레이션)")
-        
+
         if is_test:
             print(f"  - 테스트: 960→500 시점 자동 변환 (모델 호환성)")
-        
+
         # 특성 개수
         self.features_count = self.data.shape[2]  # 52개 센서
         self.class_count = len(np.unique(unique_labels))  # 클래스 개수
-        
+
         print(f"\n데이터셋 정보:")
         print(f"  - 특성 개수: {self.features_count}")
         print(f"  - 클래스 개수: {self.class_count}")
         print(f"  - 시점 수: {self.data.shape[1]}")
-    
+
     def __len__(self):
         return len(self.data)
-    
+
     def __getitem__(self, idx):
         sample = {
             'shot': self.data[idx],
             'label': self.labels[idx]
         }
-        
+
         if self.transform:
             sample = self.transform(sample)
-        
+
         return sample
 
 
 class TEPNPYDataset(Dataset):
-    """Tennessee Eastman Process Dataset for NPY files"""
-    
     def __init__(self, data_path, labels_path, transform=None):
         """
         Args:
-            data_path (str): Path to the NPY data file (shape: N, 50, 52)
-            labels_path (str): Path to the NPY labels file (shape: N, 13)
-            transform (callable, optional): Optional transform to be applied on a sample.
-                                         Note: Data is already normalized using StandardScaler
+            data_path (str): NPY 데이터 파일 경로
+            labels_path (str): NPY 라벨 파일 경로
+            transform (callable, optional): 데이터 변환
         """
-        self.data = np.load(data_path)  # shape: (N, 50, 52)
-        self.labels = np.load(labels_path)  # shape: (N, 13)
+        self.data = np.load(data_path)  # (N, 50, 52)
+        self.labels = np.load(labels_path)  # (N,)
         self.transform = transform
         
-        self.features_count = self.data.shape[-1]  # 52
-        self.class_count = self.labels.shape[-1]  # 13
+        # 데이터셋의 총 윈도우 개수로부터 시뮬레이션당 윈도우 개수 계산
+        self.windows_per_simulation = self.data.shape[0] // 6500  # 총 데이터 수 / 시뮬레이션 개수
         
-        # 시뮬레이션 인덱스 계산
-        # 한 시뮬레이션은 500 시점이 있고, 윈도우 크기 50, 스트라이드 10으로 슬라이딩하면
-        # 한 시뮬레이션당 46개의 윈도우가 생성됨
-        # 따라서 데이터 인덱스를 46으로 나눈 몫이 시뮬레이션 인덱스가 됨
-        self.simulation_indices = np.arange(len(self.data)) // 46
-        
+        # 클래스 개수 계산
+        self.class_count = len(np.unique(self.labels))
+        self.features_count = self.data.shape[2]
+
+        # 시뮬레이션 인덱스 배열 생성 (각 데이터 포인트의 시뮬레이션 번호)
+        self.sim_indices = np.repeat(np.arange(6500), self.windows_per_simulation)
+
         # 데이터셋 정보 출력
-        total_windows = len(self.data)
-        n_simulations = total_windows // 46
-        remainder = total_windows % 46
-        
         print(f"\nNPY 데이터셋 정보:")
         print(f"- 데이터 shape: {self.data.shape}")
         print(f"- 라벨 shape: {self.labels.shape}")
-        print(f"- 특성 수: {self.features_count}")
-        print(f"- 클래스 수: {self.class_count}")
-        print(f"- 총 윈도우 수: {total_windows}")
-        print(f"- 총 시뮬레이션 수: {n_simulations}")
-        print(f"- 시뮬레이션당 윈도우 수: 46 (window=50, stride=10)")
-        if remainder > 0:
-            print(f"- 경고: 마지막 시뮬레이션은 {remainder}개의 윈도우만 있음")
-        print(f"- 데이터는 이미 StandardScaler로 정규화되어 있음")
-        
+        print(f"- 라벨 범위: {np.min(self.labels)} ~ {np.max(self.labels)}")
+        print(f"- 시뮬레이션당 윈도우 개수: {self.windows_per_simulation}")
+        print(f"- 클래스 개수: {self.class_count}")
+        print(f"- 특성 개수: {self.features_count}")
+        print(f"- 시뮬레이션 인덱스 범위: {np.min(self.sim_indices)} ~ {np.max(self.sim_indices)}")
+
     def __len__(self):
         return len(self.data)
-        
+
     def __getitem__(self, idx):
+        """
+        Args:
+            idx (int): 인덱스
+
+        Returns:
+            dict: {
+                'shot': 데이터 (50, 52),
+                'label': 정수 라벨 [0-12],
+                'sim_idx': 시뮬레이션 구분을 위한 인덱스 [0-6499]
+            }
+        """
         sample = {
             "shot": self.data[idx],  # (50, 52)
-            "label": self.labels[idx],  # (13,)
-            "sim_idx": self.simulation_indices[idx]  # 시뮬레이션 구분을 위한 인덱스
+            "label": self.labels[idx],  # 정수 라벨 [0-12]
+            "sim_idx": self.sim_indices[idx]  # 시뮬레이션 구분을 위한 인덱스
         }
-        
+
         if self.transform:
-            # transform은 주로 numpy → torch 변환만 수행
-            # 데이터는 이미 정규화되어 있으므로 추가 정규화 하지 않음
             sample = self.transform(sample)
-            
+
         return sample
 
