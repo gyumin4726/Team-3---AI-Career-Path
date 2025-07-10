@@ -92,7 +92,7 @@ def main(cuda, run_tag, random_seed):
     lstm_size = 64
     loader_jobs = 4
     window_size = 50
-    bs = 128
+    bs = 256
     
     # NPY 파일 경로 설정
     train_data_path = "data/train_X.npy"
