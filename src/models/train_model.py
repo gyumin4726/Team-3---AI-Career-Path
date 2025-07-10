@@ -12,7 +12,7 @@ from tempfile import NamedTemporaryFile, TemporaryDirectory
 from pathlib import Path
 import sys
 from argparse import Namespace
-from src.data.dataset import TEPCSVDataset, CSVToTensor, CSVNormalize, InverseNormalize
+from src.data.dataset import TEPNPYDataset, CSVToTensor, CSVNormalize, InverseNormalize
 from src.models.utils import get_latest_model_id
 from src.models.recurrent_models import TEPRNN, LSTMGenerator
 from src.models.convolutional_models import (
@@ -37,7 +37,7 @@ FAKE_LABEL = 0
 @click.option('--random_seed', required=False, type=int, default=42)
 def main(cuda, run_tag, random_seed):
     """
-    GAN v5 모델 훈련 - CSV 데이터 사용
+    GAN v5 모델 훈련 - NPY 데이터 사용
     
     Args:
         cuda: GPU 번호
@@ -93,9 +93,13 @@ def main(cuda, run_tag, random_seed):
     loader_jobs = 4
     window_size = 30
     bs = 128
-    # CSV 파일 경로 설정 (항상 CSV 사용)
-    train_csv_dir = "data/train_faults"
-    train_csv_files = [os.path.join(train_csv_dir, f"train_fault_{i}.csv") for i in range(13)]
+    
+    # NPY 파일 경로 설정
+    train_data_path = "data/train_data.npy"
+    train_labels_path = "data/train_labels.npy"
+    test_data_path = "data/test_data.npy"
+    test_labels_path = "data/test_labels.npy"
+
     noise_size = 100
     conditioning_size = 1
     in_dim = noise_size + conditioning_size
@@ -124,28 +128,28 @@ def main(cuda, run_tag, random_seed):
     inverse_transform = InverseNormalize()
 
     logger.info("Preparing dataset...")
-    # 항상 CSV 파일 사용
-    trainset = TEPCSVDataset(
-        csv_files=train_csv_files,
-        transform=transform,
-        is_test=False
+    # NPY 파일 사용
+    trainset = TEPNPYDataset(
+        data_path=train_data_path,
+        labels_path=train_labels_path,
+        transform=transform
     )
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=bs, shuffle=True, num_workers=loader_jobs,
-                                              drop_last=False)
+                                            drop_last=False)
 
     logger.info("Dataset done.")
 
     logger.info("Preparing print dataset...")
-    # 항상 CSV 파일 사용 (시각화용)
-    printset = TEPCSVDataset(
-        csv_files=train_csv_files,
-        transform=None,  # 정규화 없이 원본 데이터 사용
-        is_test=False
+    # NPY 파일 사용 (시각화용)
+    printset = TEPNPYDataset(
+        data_path=train_data_path,
+        labels_path=train_labels_path,
+        transform=None  # 정규화 없이 원본 데이터 사용
     )
     print_batch_size = min(trainset.class_count, 21)  # 클래스 개수만큼, 최대 21개
 
     printloader = torch.utils.data.DataLoader(printset, batch_size=print_batch_size, shuffle=False, num_workers=1,
-                                              drop_last=False)
+                                            drop_last=False)
 
     logger.info("Dataset done.")
  
@@ -173,13 +177,14 @@ def main(cuda, run_tag, random_seed):
         logger.info('Epoch %d training...' % epoch)
         netD.train()
         netG.train()
-        # can do this cause we dont use optimizer for this net now
 
         for i, data in enumerate(trainloader, 0):
             n_iter = epoch * len(trainloader) + i
 
-            real_inputs, fault_labels = data["shot"], data["label"]
-            real_inputs, fault_labels = real_inputs.to(device), fault_labels.to(device)
+            real_inputs = data["shot"].to(device)
+            fault_labels = data["label"].to(device)
+            sim_indices = data["sim_idx"].to(device)
+
             real_inputs = real_inputs.squeeze(dim=1)
             fault_labels = fault_labels.squeeze()
 
@@ -192,10 +197,10 @@ def main(cuda, run_tag, random_seed):
             # for  label smoothing on [0.74, 1.0]
             # real_target = (0.74 - 1.0) - torch.rand(batch_size, seq_len, 1, device=device) + 1.0
 
-            type_logits, fake_logits = netD(real_inputs, None)
+            # 시뮬레이션 인덱스를 조건으로 추가
+            type_logits, fake_logits = netD(real_inputs, sim_indices)
             errD_real = binary_criterion(fake_logits, real_target)
             errD_type_real = cross_entropy_criterion(type_logits.transpose(1, 2), fault_labels)
-            # todo: print at tensorboard errD_real + errD_type
 
             errD_complex_real = real_fake_w_d * errD_real + fault_type_w_d * errD_type_real
             errD_complex_real.backward()
@@ -208,7 +213,9 @@ def main(cuda, run_tag, random_seed):
                                           dtype=torch.float32, device=device)
             random_labels = random_labels.repeat(1, seq_len, 1)
             random_labels[:, :20, :] = 0
-            noise = torch.cat((noise, random_labels), dim=2)
+
+            # 시뮬레이션 인덱스도 Generator의 입력으로 사용
+            noise = torch.cat((noise, random_labels, sim_indices.unsqueeze(-1).float()), dim=2)
 
             state_h, state_c = netG.zero_state(batch_size)
             state_h, state_c = state_h.to(device), state_c.to(device)
@@ -218,7 +225,7 @@ def main(cuda, run_tag, random_seed):
             # for  label smoothing on [0.0, 0.3]
             # fake_target = (0.0 - 0.3) - torch.rand(batch_size, seq_len, 1, device=device) + 0.3
             # WARNING: do not forget about detach!
-            type_logits, fake_logits = netD(fake_inputs.detach(), None)
+            type_logits, fake_logits = netD(fake_inputs.detach(), sim_indices)
             errD_fake = binary_criterion(fake_logits, fake_target)
             errD_type_fake = cross_entropy_criterion(type_logits.transpose(1, 2), random_labels.long().squeeze())
 

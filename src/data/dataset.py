@@ -464,3 +464,44 @@ class TEPCSVDataset(Dataset):
         
         return sample
 
+
+class TEPNPYDataset(Dataset):
+    """Tennessee Eastman Process Dataset for NPY files"""
+    
+    def __init__(self, data_path, labels_path, transform=None):
+        """
+        Args:
+            data_path (str): Path to the NPY data file (shape: 6500, n, 50, 52)
+            labels_path (str): Path to the NPY labels file (shape: 6500, n, 1)
+            transform (callable, optional): Optional transform to be applied on a sample
+        """
+        self.data = np.load(data_path)  # shape: (6500, n, 50, 52)
+        self.labels = np.load(labels_path)  # shape: (6500, n, 1)
+        self.transform = transform
+        
+        self.features_count = self.data.shape[-1]  # 52
+        self.class_count = 13  # 0-12 fault types including normal
+        self.seq_length = self.data.shape[2]  # 50 (window size)
+        self.slides_per_sim = self.data.shape[1]  # n (이미 계산된 슬라이드 수)
+        
+        # 시뮬레이션 인덱스 생성 (6500개 시뮬레이션 각각에 대해 n번 반복)
+        self.sim_indices = np.repeat(np.arange(len(self.data)), self.slides_per_sim)
+        
+    def __len__(self):
+        return len(self.data) * self.slides_per_sim
+        
+    def __getitem__(self, idx):
+        sim_idx = self.sim_indices[idx]
+        slide_idx = idx % self.slides_per_sim
+        
+        sample = {
+            "shot": torch.FloatTensor(self.data[sim_idx, slide_idx:slide_idx+1]),  # (1, 50, 52)
+            "label": torch.LongTensor(self.labels[sim_idx, slide_idx:slide_idx+1]),  # (1, 1)
+            "sim_idx": sim_idx  # 시뮬레이션 구분을 위한 인덱스
+        }
+        
+        if self.transform:
+            sample = self.transform(sample)
+            
+        return sample
+
