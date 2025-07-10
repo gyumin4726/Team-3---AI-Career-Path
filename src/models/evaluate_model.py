@@ -226,7 +226,7 @@ def main(model_path, test_data, test_labels, cuda, batch_size, save_dir, random_
         data_path=test_data,
         labels_path=test_labels,
         transform=transform,
-        is_test=True  # 테스트 데이터는 960 시점
+        is_test=True  # 테스트 데이터는 92개 윈도우 사용
     )
     
     # 데이터 로더 생성
