@@ -128,7 +128,8 @@ def main(cuda, run_tag, random_seed):
     trainset = TEPNPYDataset(
         data_path=train_data_path,
         labels_path=train_labels_path,
-        transform=transform
+        transform=transform,
+        is_test=False  # 훈련 데이터는 46 윈도우 사용
     )
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=bs, shuffle=True, num_workers=loader_jobs,
                                             drop_last=False)
@@ -140,7 +141,8 @@ def main(cuda, run_tag, random_seed):
     printset = TEPNPYDataset(
         data_path=train_data_path,
         labels_path=train_labels_path,
-        transform=None  # 정규화 없이 원본 데이터 사용
+        transform=None,  # 정규화 없이 원본 데이터 사용
+        is_test=False  # 훈련 데이터는 46 윈도우 사용
     )
     print_batch_size = min(trainset.class_count, 21)  # 클래스 개수만큼, 최대 21개
 

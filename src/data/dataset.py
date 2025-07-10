@@ -478,19 +478,21 @@ class TEPCSVDataset(Dataset):
 
 
 class TEPNPYDataset(Dataset):
-    def __init__(self, data_path, labels_path, transform=None):
+    def __init__(self, data_path, labels_path, transform=None, is_test=False):
         """
         Args:
             data_path (str): NPY 데이터 파일 경로
             labels_path (str): NPY 라벨 파일 경로
             transform (callable, optional): 데이터 변환
+            is_test (bool): 테스트 데이터 여부 (True: 92 윈도우, False: 46 윈도우)
         """
         self.data = np.load(data_path)  # (N, 50, 52)
         self.labels = np.load(labels_path)  # (N,)
         self.transform = transform
+        self.is_test = is_test
         
-        # 데이터셋의 총 윈도우 개수로부터 시뮬레이션당 윈도우 개수 계산
-        self.windows_per_simulation = self.data.shape[0] // 6500  # 총 데이터 수 / 시뮬레이션 개수
+        # 시뮬레이션당 윈도우 개수를 is_test에 따라 하드코딩
+        self.windows_per_simulation = 92 if is_test else 46
         
         # 클래스 개수 계산
         self.class_count = len(np.unique(self.labels))
@@ -504,7 +506,7 @@ class TEPNPYDataset(Dataset):
         print(f"- 데이터 shape: {self.data.shape}")
         print(f"- 라벨 shape: {self.labels.shape}")
         print(f"- 라벨 범위: {np.min(self.labels)} ~ {np.max(self.labels)}")
-        print(f"- 시뮬레이션당 윈도우 개수: {self.windows_per_simulation}")
+        print(f"- 시뮬레이션당 윈도우 개수: {self.windows_per_simulation} ({'test' if is_test else 'train'} 모드)")
         print(f"- 클래스 개수: {self.class_count}")
         print(f"- 특성 개수: {self.features_count}")
         print(f"- 시뮬레이션 인덱스 범위: {np.min(self.sim_indices)} ~ {np.max(self.sim_indices)}")
