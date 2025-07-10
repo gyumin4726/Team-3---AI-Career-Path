@@ -218,8 +218,7 @@ def main(model_path, test_data, test_labels, cuda, batch_size, save_dir, random_
     
     # 데이터 변환 설정
     transform = transforms.Compose([
-        CSVToTensor(),
-        CSVNormalize()
+        CSVToTensor()
     ])
     
     # 테스트 데이터셋 생성
