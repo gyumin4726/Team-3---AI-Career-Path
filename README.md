@@ -131,6 +131,7 @@ data/test_faults/
 ```bash
 # CNN1D2D+GAN 하이브리드 모델
 python -m src.models.train_model --cuda 0 --run_tag main_model
+python -m src.models.train_model --cuda 0 --run_tag resumed_training --resume_from "models/[모델ID]/weights/[에폭번호]_epoch_checkpoint.pth"
 ```
 
 이 하나의 명령으로 전체 시스템이 완성됩니다:

@@ -33,7 +33,8 @@ FAKE_LABEL = 0
 @click.option('--cuda', required=True, type=int, default=7)
 @click.option('--run_tag', required=True, type=str, default="unknown")
 @click.option('--random_seed', required=False, type=int, default=42)
-def main(cuda, run_tag, random_seed):
+@click.option('--resume_from', required=False, type=str, default=None, help='체크포인트 파일 경로')
+def main(cuda, run_tag, random_seed, resume_from):
     """
     GAN v5 모델 훈련 - NPY 데이터 사용
     
@@ -41,6 +42,7 @@ def main(cuda, run_tag, random_seed):
         cuda: GPU 번호
         run_tag: 실험 태그 (로그 구분용)
         random_seed: 랜덤 시드 (옵션)
+        resume_from: 이어서 학습할 체크포인트 경로 (옵션)
     """
     # for tensorboard logs
     try:
@@ -96,7 +98,7 @@ def main(cuda, run_tag, random_seed):
     noise_size = 100
     conditioning_size = 1
     in_dim = noise_size + conditioning_size
-    checkpoint_every = 10
+    checkpoint_every = 5  # 10에서 5로 변경
     real_fake_w_d = 1.0  # weight for real fake in loss
     fault_type_w_d = 0.8  # weight for fault type term in loss
     real_fake_w_g = 1.0  # weight for real fake in loss
@@ -146,6 +148,20 @@ def main(cuda, run_tag, random_seed):
                                          class_count=trainset.class_count,
                                          kernel_size=9, dropout=0.2, groups=trainset.features_count).to(device)
 
+    optimizerD = optim.Adam(netD.parameters(), lr=0.0002)
+    optimizerG = optim.Adam(netG.parameters(), lr=0.0002)
+
+    start_epoch = 0
+    if resume_from and os.path.exists(resume_from):
+        logger.info(f'체크포인트를 불러옵니다: {resume_from}')
+        checkpoint = torch.load(resume_from)
+        netG.load_state_dict(checkpoint['generator_state_dict'])
+        netD.load_state_dict(checkpoint['discriminator_state_dict'])
+        optimizerG.load_state_dict(checkpoint['optimizer_G_state_dict'])
+        optimizerD.load_state_dict(checkpoint['optimizer_D_state_dict'])
+        start_epoch = checkpoint['epoch'] + 1
+        logger.info(f'에폭 {start_epoch}부터 학습을 재개합니다.')
+
     logger.info("Generator:\n" + str(netG))
     logger.info("Discriminator:\n" + str(netD))
 
@@ -153,11 +169,8 @@ def main(cuda, run_tag, random_seed):
     cross_entropy_criterion = nn.CrossEntropyLoss()
     similarity = nn.MSELoss(reduction='mean')
 
-    optimizerD = optim.Adam(netD.parameters(), lr=0.0002)
-    optimizerG = optim.Adam(netG.parameters(), lr=0.0002)
-
     logger.info("Models done.")
-    for epoch in range(epochs):
+    for epoch in range(start_epoch, epochs):
 
         logger.info('Epoch %d training...' % epoch)
         netD.train()
@@ -300,7 +313,7 @@ def main(cuda, run_tag, random_seed):
         logger.info('Epoch %d passed' % epoch)
 
         # Saving epoch results.
-        if epoch in [0, 1, 2, 3, 5, 10, 15, 20, 30, 40, 50, *list(range(60, epochs, 30)), epochs - 1]:
+        if epoch in [0, *list(range(20, epochs, 20)), epochs - 1]:
             netD.eval()
             netG.eval()
 
@@ -344,10 +357,16 @@ def main(cuda, run_tag, random_seed):
                 im.save(fp_fake, format=None)
 
         if (epoch % checkpoint_every == 0) or (epoch == (epochs - 1)):
-            torch.save(netG, os.path.join(temp_model_dir.name, "weights", f"{epoch}_epoch_generator.pth"))
-            torch.save(netD, os.path.join(temp_model_dir.name, "weights", f"{epoch}_epoch_discriminator.pth"))
-
-        pass
+            checkpoint = {
+                'epoch': epoch,
+                'generator_state_dict': netG.state_dict(),
+                'discriminator_state_dict': netD.state_dict(),
+                'optimizer_G_state_dict': optimizerG.state_dict(),
+                'optimizer_D_state_dict': optimizerD.state_dict(),
+            }
+            checkpoint_path = os.path.join(temp_model_dir.name, "weights", f"{epoch}_epoch_checkpoint.pth")
+            torch.save(checkpoint, checkpoint_path)
+            logger.info(f'체크포인트 저장됨: {checkpoint_path}')
 
     logger.info(f'Finished training for {epochs} epochs.')
 
