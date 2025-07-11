@@ -66,16 +66,26 @@ def load_model(model_path, device):
 
 def print_sequential_voting_results(predictions_by_sim, labels_by_sim, logger, save_dir):
     """시뮬레이션별 순차적 윈도우 투표 결과 출력 및 저장"""
-    logger.info("\n시뮬레이션별 순차적 윈도우 투표 결과 (처음 5개 시뮬레이션):")
+    logger.info("\n각 클래스별 대표 시뮬레이션 순차적 윈도우 투표 결과:")
     
     # 텍스트 파일로 저장
     with open(os.path.join(save_dir, 'sequential_voting_results.txt'), 'w', encoding='utf-8') as f:
-        # 처음 5개 시뮬레이션에 대해 출력 및 저장
-        for sim_idx in sorted(list(predictions_by_sim.keys()))[:5]:
+        # 각 클래스(0~12)에 대해 하나의 시뮬레이션 선택
+        for target_class in range(13):  # 0부터 12까지
+            # 해당 클래스의 첫 번째 시뮬레이션 찾기
+            sim_idx = None
+            for idx, label in labels_by_sim.items():
+                if label == target_class:
+                    sim_idx = idx
+                    break
+            
+            if sim_idx is None:
+                continue  # 해당 클래스의 시뮬레이션이 없으면 건너뛰기
+            
             true_label = labels_by_sim[sim_idx]
             predictions = predictions_by_sim[sim_idx]
             
-            header = f"\n시뮬레이션 {sim_idx} (실제 클래스: {true_label}):"
+            header = f"\n시뮬레이션 {sim_idx} (클래스 {true_label}: {'정상' if true_label == 0 else f'결함{true_label}'}):"
             logger.info(header)
             f.write(header + '\n')
             
@@ -272,7 +282,7 @@ def save_results(results, save_dir):
 @click.option('--test_data', type=str, default='data/test_X_model1.npy', help='테스트 데이터 NPY 파일 경로')
 @click.option('--test_labels', type=str, default='data/test_y_model1.npy', help='테스트 라벨 NPY 파일 경로')
 @click.option('--cuda', type=int, default=0, help='사용할 GPU 번호')
-@click.option('--batch_size', type=int, default=16, help='배치 크기')
+@click.option('--batch_size', type=int, default=128, help='배치 크기')
 @click.option('--save_dir', type=str, default='model1_evaluation_results', help='결과 저장 디렉토리')
 @click.option('--random_seed', type=int, default=42, help='랜덤 시드')
 def main(model_path, test_data, test_labels, cuda, batch_size, save_dir, random_seed):
