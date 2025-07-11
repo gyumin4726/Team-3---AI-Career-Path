@@ -64,6 +64,52 @@ def load_model(model_path, device):
     return model
 
 
+def print_sequential_voting_results(predictions_by_sim, labels_by_sim, logger, save_dir):
+    """시뮬레이션별 순차적 윈도우 투표 결과 출력 및 저장"""
+    logger.info("\n시뮬레이션별 순차적 윈도우 투표 결과 (처음 5개 시뮬레이션):")
+    
+    # 텍스트 파일로 저장
+    with open(os.path.join(save_dir, 'sequential_voting_results.txt'), 'w', encoding='utf-8') as f:
+        # 처음 5개 시뮬레이션에 대해 출력 및 저장
+        for sim_idx in sorted(list(predictions_by_sim.keys()))[:5]:
+            true_label = labels_by_sim[sim_idx]
+            predictions = predictions_by_sim[sim_idx]
+            
+            header = f"\n시뮬레이션 {sim_idx} (실제 클래스: {true_label}):"
+            logger.info(header)
+            f.write(header + '\n')
+            
+            subheader = "윈도우별 예측:"
+            logger.info(subheader)
+            f.write(subheader + '\n')
+            
+            # 각 윈도우의 예측값을 순서대로 출력
+            for window_idx, pred in enumerate(predictions):
+                line = f"  윈도우 {window_idx:3d}: 예측 = {pred}"
+                logger.info(line)
+                f.write(line + '\n')
+            
+            # 전체 윈도우에 대한 최종 투표 결과
+            final_votes = Counter(predictions)
+            final_pred = final_votes.most_common(1)[0][0]
+            
+            summary = f"\n  최종 결과:"
+            logger.info(summary)
+            f.write(summary + '\n')
+            
+            vote_dist = f"    전체 투표 분포: {dict(final_votes)}"
+            logger.info(vote_dist)
+            f.write(vote_dist + '\n')
+            
+            final = f"    최종 예측: {final_pred}"
+            logger.info(final)
+            f.write(final + '\n')
+            
+            accuracy = f"    예측 정확성: {'정확' if final_pred == true_label else '오류'}"
+            logger.info(accuracy)
+            f.write(accuracy + '\n')
+
+
 def evaluate_model(model, test_loader, device):
     """
     모델 평가 함수
@@ -98,19 +144,22 @@ def evaluate_model(model, test_loader, device):
             batch_labels = labels.cpu().numpy()
             sim_indices = sim_indices.cpu().numpy()
             
-            # 시뮬레이션별로 예측값 수집
+            # 시뮬레이션별로 예측값 수집 (순서 유지)
             for i, (pred, label, idx) in enumerate(zip(batch_preds, batch_labels, sim_indices)):
                 if idx not in predictions_by_sim:
                     predictions_by_sim[idx] = []
-                    labels_by_sim[idx] = label  # label이 이미 스칼라값이므로 인덱싱 제거
+                    labels_by_sim[idx] = label
                 predictions_by_sim[idx].extend(pred)
+    
+    # 순차적 투표 결과 출력
+    logger = logging.getLogger(__name__)
+    print_sequential_voting_results(predictions_by_sim, labels_by_sim, logger, save_dir)
     
     # 각 시뮬레이션별로 majority voting 수행
     final_predictions = []
     final_labels = []
     
     for sim_idx in sorted(predictions_by_sim.keys()):
-        # Majority voting으로 최종 예측
         final_pred = Counter(predictions_by_sim[sim_idx]).most_common(1)[0][0]
         final_predictions.append(final_pred)
         final_labels.append(labels_by_sim[sim_idx])
@@ -218,12 +267,12 @@ def save_results(results, save_dir):
 
 
 @click.command()
-@click.option('--model_path', required=True, type=str, help='학습된 discriminator 모델 경로 (.pth 파일)')
-@click.option('--test_data', type=str, default='data/test_X.npy', help='테스트 데이터 NPY 파일 경로')
-@click.option('--test_labels', type=str, default='data/test_y.npy', help='테스트 라벨 NPY 파일 경로')
+@click.option('--model_path', type=str, default='model_pretrained/model1/19_epoch_checkpoint.pth', help='학습된 discriminator 모델 경로 (.pth 파일)')
+@click.option('--test_data', type=str, default='data/test_X_model1.npy', help='테스트 데이터 NPY 파일 경로')
+@click.option('--test_labels', type=str, default='data/test_y_model1.npy', help='테스트 라벨 NPY 파일 경로')
 @click.option('--cuda', type=int, default=0, help='사용할 GPU 번호')
 @click.option('--batch_size', type=int, default=16, help='배치 크기')
-@click.option('--save_dir', type=str, default='evaluation_results', help='결과 저장 디렉토리')
+@click.option('--save_dir', type=str, default='model1_evaluation_results', help='결과 저장 디렉토리')
 @click.option('--random_seed', type=int, default=42, help='랜덤 시드')
 def main(model_path, test_data, test_labels, cuda, batch_size, save_dir, random_seed):
     """
