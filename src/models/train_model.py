@@ -21,7 +21,6 @@ from src.models.convolutional_models import (
 import torch.backends.cudnn as cudnn
 from src.data.dataset import TEPDataset
 from src.models.utils import time_series_to_plot
-from tensorboardX import SummaryWriter
 import random
 from PIL import Image
 
@@ -29,7 +28,6 @@ from PIL import Image
 
 REAL_LABEL = 1
 FAKE_LABEL = 0
-
 
 @click.command()
 @click.option('--cuda', required=True, type=int, default=7)
@@ -59,9 +57,6 @@ def main(cuda, run_tag, random_seed):
     Path(temp_model_dir.name).mkdir(parents=True, exist_ok=False)
     Path(os.path.join(temp_model_dir.name), "images").mkdir(parents=True, exist_ok=False)
     Path(os.path.join(temp_model_dir.name), "weights").mkdir(parents=True, exist_ok=False)
-    temp_model_dir_tensorboard = TemporaryDirectory(dir="logs", prefix=prefix)
-    temp_model_dir_tensorboard.cleanup()
-    Path(temp_model_dir_tensorboard.name).mkdir(parents=True, exist_ok=False)
     temp_log_file = os.path.join(temp_model_dir.name, 'log.txt')
     file_handler = logging.FileHandler(temp_log_file)
     file_handler.setFormatter(log_formatter)
@@ -74,7 +69,7 @@ def main(cuda, run_tag, random_seed):
 
     device = torch.device(f"cuda:{cuda}" if torch.cuda.is_available() else "cpu")
     logger.info(f'Training begin on {device}')
-    logger.info(f'Tmp TB dir {temp_model_dir_tensorboard.name}, tmp model dir {temp_model_dir.name}')
+    logger.info(f'Tmp model dir {temp_model_dir.name}')
 
     with open(__file__, 'r') as f:
         with open(os.path.join(temp_model_dir.name, "script.py"), 'w') as out:
@@ -92,7 +87,7 @@ def main(cuda, run_tag, random_seed):
     lstm_size = 64
     loader_jobs = 4
     window_size = 50
-    bs = 256
+    bs = 512
     
     # NPY 파일 경로 설정
     train_data_path = "data/train_X.npy"
@@ -106,15 +101,8 @@ def main(cuda, run_tag, random_seed):
     fault_type_w_d = 0.8  # weight for fault type term in loss
     real_fake_w_g = 1.0  # weight for real fake in loss
     similarity_w_g = 1.0  # weight for fault type term in loss
-    generator_train_prob = 0.8  # how frequently ignore the generator step. Note that the amount of total steps will be
-    # equal to epochs * 83 batches * generator_train_prob, which is (1 - generator_train_prob) % less that for
-    # discriminator
+    generator_train_prob = 0.8  # how frequently ignore the generator step
     epochs = 300
-
-    # Create writer for tensorboard
-    writer = SummaryWriter(temp_model_dir_tensorboard.name)
-    # todo: add all running options to some structure and print them.
-    writer.add_text('Options', str("Here yo can write running options or put your ads."), 0)
 
     # 데이터 변환 설정 (NPY 데이터는 이미 정규화되어 있음)
     transform = transforms.Compose([
@@ -164,7 +152,6 @@ def main(cuda, run_tag, random_seed):
     binary_criterion = nn.BCEWithLogitsLoss()
     cross_entropy_criterion = nn.CrossEntropyLoss()
     similarity = nn.MSELoss(reduction='mean')
-
 
     optimizerD = optim.Adam(netD.parameters(), lr=0.0002)
     optimizerG = optim.Adam(netG.parameters(), lr=0.0002)
@@ -268,10 +255,6 @@ def main(cuda, run_tag, random_seed):
 
             optimizerD.step()
 
-            # Visualize discriminator gradients
-            for name, param in netD.named_parameters():
-                writer.add_histogram("DiscriminatorGradients/{}".format(name), param.grad, n_iter)
-
             # (2) Update G network: maximize log(D(G(z)))
             ###########################
             g_coin = random.random() < generator_train_prob
@@ -288,7 +271,6 @@ def main(cuda, run_tag, random_seed):
                 D_G_z2 = fake_logits.mean().item()
 
                 # Visual similarity correction
-                # todo: add KL-divergence term
                 noise = torch.randn(batch_size, seq_len, noise_size, device=device)
                 # fault_labels의 shape를 확인하고 적절히 처리
                 if fault_labels.numel() == batch_size:
@@ -310,28 +292,14 @@ def main(cuda, run_tag, random_seed):
 
                 optimizerG.step()
 
-            # Visualize generator gradients
-            for name, param in netG.named_parameters():
-                writer.add_histogram("GeneratorGradients/{}".format(name), param.grad, n_iter)
-
             log_flag = True
             if log_flag:
                 logger.info('[%d/%d][%d/%d] Loss_D: %.4f Loss_G: %.4f D(x): %.4f D(G(z)): %.4f / %.4f' %
                             (epoch, epochs, i, len(trainloader), errD.item(), errG.item(), D_x, D_G_z1, D_G_z2))
 
-            writer.add_scalar('GeneratorLoss', errG.item(), n_iter)
-            writer.add_scalar('GeneratorLossSimilarity', errG_similarity.item(), n_iter)
-
-            writer.add_scalar('DiscriminatorLoss', errD.item(), n_iter)
-            writer.add_scalar('DiscriminatorLossFaultType', errD_fault_type.item(), n_iter)
-            writer.add_scalar('DofX_noSigmoid', D_x, n_iter)
-            writer.add_scalar('DofGofz_noSigmoid', D_G_z1, n_iter)
-
         logger.info('Epoch %d passed' % epoch)
-        # trainset.shuffle()
 
         # Saving epoch results.
-        # The following images savings cost a lot of memory, reduce the frequency
         if epoch in [0, 1, 2, 3, 5, 10, 15, 20, 30, 40, 50, *list(range(60, epochs, 30)), epochs - 1]:
             netD.eval()
             netG.eval()
@@ -348,7 +316,6 @@ def main(cuda, run_tag, random_seed):
                 ndarr = rp.to('cpu', torch.uint8).permute(1, 2, 0).numpy()
                 im = Image.fromarray(ndarr, mode="RGB")
                 im.save(fp_real, format=None)
-                writer.add_image(f"RealTEP_{idx}", rp, epoch)
 
             batch_size, seq_len = real_inputs.size(0), real_inputs.size(1)
             noise = torch.randn(batch_size, seq_len, noise_size, device=device)
@@ -375,30 +342,21 @@ def main(cuda, run_tag, random_seed):
                 ndarr = fp.to('cpu', torch.uint8).permute(1, 2, 0).numpy()
                 im = Image.fromarray(ndarr, mode="RGB")
                 im.save(fp_fake, format=None)
-                writer.add_image(f"FakeTEP_{idx}", fp, epoch)
 
         if (epoch % checkpoint_every == 0) or (epoch == (epochs - 1)):
             torch.save(netG, os.path.join(temp_model_dir.name, "weights", f"{epoch}_epoch_generator.pth"))
             torch.save(netD, os.path.join(temp_model_dir.name, "weights", f"{epoch}_epoch_discriminator.pth"))
 
-        # change_print_sim_run은 TEPDatasetV4에만 있음 (CSV 모드에서는 불필요)
         pass
 
     logger.info(f'Finished training for {epochs} epochs.')
 
     file_handler.close()
-    writer.close()
 
     os.rename(
         temp_model_dir.name,
         os.path.join("models", f'{latest_model_id}_{run_tag}')
     )
-
-    os.rename(
-        temp_model_dir_tensorboard.name,
-        os.path.join("logs", f'{latest_model_id}_{run_tag}')
-    )
-
 
 if __name__ == '__main__':
     main()
