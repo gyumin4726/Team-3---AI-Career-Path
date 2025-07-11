@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 from collections import Counter
 
 from src.data.dataset import TEP_MEAN, TEP_STD, CSVToTensor, CSVNormalize, TEPNPYDataset, TEPDataset
+from src.models.convolutional_models import CNN1D2DDiscriminatorMultitask
 
 
 def setup_logger():
@@ -39,8 +40,24 @@ def load_model(model_path, device):
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"모델 파일을 찾을 수 없습니다: {model_path}")
     
-    # 전체 모델 로드
-    model = torch.load(model_path, map_location=device)
+    # 체크포인트에서 discriminator state dict 로드
+    checkpoint = torch.load(model_path, map_location=device)
+    
+    # Discriminator 모델 생성
+    model = CNN1D2DDiscriminatorMultitask(
+        input_size=52,  # TEP 데이터의 feature 수
+        n_layers_1d=4,
+        n_layers_2d=4,
+        n_channel=52 * 3,
+        n_channel_2d=100,
+        class_count=13,  # 정상 + 12개 결함
+        kernel_size=9,
+        dropout=0.2,
+        groups=52
+    ).to(device)
+    
+    # state dict 로드
+    model.load_state_dict(checkpoint['discriminator_state_dict'])
     model.eval()
     
     logger.info(f"모델 로드 완료: {type(model).__name__}")
@@ -173,6 +190,10 @@ def plot_confusion_matrix(run_predictions, run_labels, save_path=None):
     plt.ylabel('True Label')
     
     if save_path:
+        # 저장 경로의 디렉토리가 없으면 생성
+        save_dir = os.path.dirname(save_path)
+        if save_dir:
+            os.makedirs(save_dir, exist_ok=True)
         plt.savefig(save_path)
         plt.close()
     else:
@@ -198,8 +219,8 @@ def save_results(results, save_dir):
 
 @click.command()
 @click.option('--model_path', required=True, type=str, help='학습된 discriminator 모델 경로 (.pth 파일)')
-@click.option('--test_data', type=str, default='data/test_X_small.npy', help='테스트 데이터 NPY 파일 경로')
-@click.option('--test_labels', type=str, default='data/test_intY_small.npy', help='테스트 라벨 NPY 파일 경로')
+@click.option('--test_data', type=str, default='data/test_X.npy', help='테스트 데이터 NPY 파일 경로')
+@click.option('--test_labels', type=str, default='data/test_y.npy', help='테스트 라벨 NPY 파일 경로')
 @click.option('--cuda', type=int, default=0, help='사용할 GPU 번호')
 @click.option('--batch_size', type=int, default=16, help='배치 크기')
 @click.option('--save_dir', type=str, default='evaluation_results', help='결과 저장 디렉토리')
@@ -241,7 +262,7 @@ def main(model_path, test_data, test_labels, cuda, batch_size, save_dir, random_
         test_dataset,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=4
+        num_workers=0  # Windows에서의 multiprocessing 문제 해결을 위해 0으로 설정
     )
     
     # 데이터셋 상세 정보 확인

@@ -111,19 +111,17 @@ class CNN1D2DDiscriminatorMultitask(nn.Module):
         self.activation = nn.LeakyReLU(0.1)
 
     def forward(self, x, _, channel_last=True):
-        print(f"Input x shape: {x.shape}")
         common = self.tcn(x.transpose(1, 2) if channel_last else x).transpose(1, 2)
-        print(f"After TCN shape: {common.shape}")
         common = common.unsqueeze(1)
-        print(f"After unsqueeze shape: {common.shape}")
         common = self.ccn(common)
         common = common.view(-1, 50, self.n_channel_2d * 6 * 32 // 50)
+        
         type_logits = self.activation(self.fault_type_head_fc1(common))
         type_logits = self.activation(self.fault_type_head_fc2(type_logits))
         type_logits = self.fault_type_head_fc3(type_logits)
 
         real_fake_logits = self.activation(self.real_fake_head_fc1(common))
-        real_fake_logits = self.activation(self.real_fake_head_fc2(real_fake_logits))
+        real_fake_logits = torch.sigmoid(self.real_fake_head_fc2(real_fake_logits))
 
         return type_logits, real_fake_logits
 

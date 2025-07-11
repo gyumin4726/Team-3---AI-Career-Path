@@ -498,8 +498,12 @@ class TEPNPYDataset(Dataset):
         self.class_count = len(np.unique(self.labels))
         self.features_count = self.data.shape[2]
 
+        # 시뮬레이션 수 계산 (테스트: 200, 훈련: 500)
+        sims_per_class = 200 if is_test else 500
+        total_sims = sims_per_class * self.class_count  # 13개 클래스
+
         # 시뮬레이션 인덱스 배열 생성 (각 데이터 포인트의 시뮬레이션 번호)
-        self.sim_indices = np.repeat(np.arange(6500), self.windows_per_simulation)
+        self.sim_indices = np.repeat(np.arange(total_sims), self.windows_per_simulation)
 
         # 데이터셋 정보 출력
         print(f"\nNPY 데이터셋 정보:")
@@ -510,6 +514,7 @@ class TEPNPYDataset(Dataset):
         print(f"- 클래스 개수: {self.class_count}")
         print(f"- 특성 개수: {self.features_count}")
         print(f"- 시뮬레이션 인덱스 범위: {np.min(self.sim_indices)} ~ {np.max(self.sim_indices)}")
+        print(f"- 총 시뮬레이션 수: {total_sims} ({sims_per_class}개/클래스 × {self.class_count}개 클래스)")
 
     def __len__(self):
         return len(self.data)
