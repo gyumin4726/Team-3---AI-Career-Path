@@ -110,7 +110,7 @@ def print_sequential_voting_results(predictions_by_sim, labels_by_sim, logger, s
             f.write(accuracy + '\n')
 
 
-def evaluate_model(model, test_loader, device):
+def evaluate_model(model, test_loader, device, save_dir):
     """
     모델 평가 함수
     
@@ -118,6 +118,7 @@ def evaluate_model(model, test_loader, device):
         model: 평가할 모델
         test_loader: 테스트 데이터 로더
         device: 연산 장치 (CPU/GPU)
+        save_dir: 결과 저장 디렉토리
         
     Returns:
         accuracy: 전체 시뮬레이션에 대한 정확도
@@ -319,9 +320,9 @@ def main(model_path, test_data, test_labels, cuda, batch_size, save_dir, random_
     
     # 첫 번째 배치 가져오기
     first_batch = next(iter(test_loader))
-    logger.info(f"배치 데이터 shape: {first_batch['shot'].shape}")  # [batch_size, 50, 52]
-    logger.info(f"배치 라벨 shape: {first_batch['label'].shape}")   # [batch_size, 13]
-    logger.info(f"배치 시뮬레이션 인덱스 shape: {first_batch['sim_idx'].shape}")  # [batch_size]
+    logger.info(f"배치 데이터 shape: {first_batch['shot'].shape}")
+    logger.info(f"배치 라벨 shape: {first_batch['label'].shape}")
+    logger.info(f"배치 시뮬레이션 인덱스 shape: {first_batch['sim_idx'].shape}")
     
     # 시뮬레이션 인덱스 분포 확인
     sim_indices = first_batch['sim_idx'].numpy()
@@ -335,14 +336,14 @@ def main(model_path, test_data, test_labels, cuda, batch_size, save_dir, random_
     for i in range(min(5, len(sim_indices))):
         logger.info(f"샘플 {i}:")
         logger.info(f"  - 시뮬레이션 인덱스: {sim_indices[i]}")
-        logger.info(f"  - 라벨: {first_batch['label'][i].argmax().item()}")  # 원-핫 인코딩된 라벨의 클래스
+        logger.info(f"  - 라벨: {first_batch['label'][i].argmax().item()}")
     
     # 모델 로드
     model = load_model(model_path, device)
     
     # 모델 평가
     logger.info("모델 평가 시작...")
-    accuracy, predictions, labels = evaluate_model(model, test_loader, device)
+    accuracy, predictions, labels = evaluate_model(model, test_loader, device, save_dir)
     logger.info(f"평가 완료. 정확도: {accuracy:.4f}")
     
     # 결과 분석
