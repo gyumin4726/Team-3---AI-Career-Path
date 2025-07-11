@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Tennessee Eastman Process NPY 데이터 평가 스크립트
-학습된 GAN v5 모델을 사용하여 NPY 테스트 데이터 평가
+학습된 GAN v5 모델을 사용하여 NPY 테스트 데이터의 fault 시작 시점 탐지
 """
 
 import os
@@ -85,6 +85,13 @@ def print_sequential_voting_results(predictions_by_sim, labels_by_sim, logger, s
             true_label = labels_by_sim[sim_idx]
             predictions = predictions_by_sim[sim_idx]
             
+            # Fault 시작 시점 탐지
+            onset_idx, is_stable, correct_preds = detect_fault_onset(
+                predictions,
+                true_label,
+                threshold=5
+            )
+            
             header = f"\n시뮬레이션 {sim_idx} (클래스 {true_label}: {'정상' if true_label == 0 else f'결함{true_label}'}):"
             logger.info(header)
             f.write(header + '\n')
@@ -95,7 +102,12 @@ def print_sequential_voting_results(predictions_by_sim, labels_by_sim, logger, s
             
             # 각 윈도우의 예측값을 순서대로 출력
             for window_idx, pred in enumerate(predictions):
-                line = f"  윈도우 {window_idx:3d}: 예측 = {pred}"
+                # Fault 시작 시점 표시
+                onset_mark = ""
+                if window_idx == onset_idx and is_stable:
+                    onset_mark = " <-- Fault 시작 시점 (이후 5번 연속 정답 예측)"
+                
+                line = f"  윈도우 {window_idx:3d}: 예측 = {pred}{onset_mark}"
                 logger.info(line)
                 f.write(line + '\n')
             
@@ -118,22 +130,57 @@ def print_sequential_voting_results(predictions_by_sim, labels_by_sim, logger, s
             accuracy = f"    예측 정확성: {'정확' if final_pred == true_label else '오류'}"
             logger.info(accuracy)
             f.write(accuracy + '\n')
+            
+            if is_stable and onset_idx > 0:
+                onset_info = f"\n    Fault 시작 시점: 윈도우 {onset_idx}"
+                logger.info(onset_info)
+                f.write(onset_info + '\n')
+                
+                correct_seq = f"    연속 정답 예측: {correct_preds}"
+                logger.info(correct_seq)
+                f.write(correct_seq + '\n')
 
+
+def detect_fault_onset(predictions, true_label, threshold=5):
+    """
+    Fault 시작 시점 탐지
+    
+    Args:
+        predictions: 윈도우별 예측값 리스트
+        true_label: 실제 fault 라벨
+        threshold: 연속된 fault 예측 횟수 임계값
+    
+    Returns:
+        onset_idx: Fault 시작 시점 (윈도우 인덱스)
+        is_stable: Fault 예측이 안정적인지 여부
+        correct_predictions: 시작 시점부터의 연속된 정답 예측값들
+    """
+    if len(predictions) < threshold:
+        return 0, False, []
+        
+    # 연속된 정답 예측 카운트
+    correct_count = 0
+    onset_idx = 0
+    
+    for i, pred in enumerate(predictions):
+        if pred == true_label and true_label != 0:  # 정상(0)이 아닌 정답 fault와 일치
+            correct_count += 1
+            if correct_count == 1:  # 첫 정답 시점 저장
+                onset_idx = i
+        else:
+            correct_count = 0
+            onset_idx = 0
+            
+        if correct_count >= threshold:
+            # 시작 시점부터 threshold 개수만큼의 예측값 반환
+            correct_predictions = predictions[onset_idx:onset_idx+threshold]
+            return onset_idx, True, correct_predictions
+            
+    return 0, False, []
 
 def evaluate_model(model, test_loader, device, save_dir):
     """
     모델 평가 함수
-    
-    Args:
-        model: 평가할 모델
-        test_loader: 테스트 데이터 로더
-        device: 연산 장치 (CPU/GPU)
-        save_dir: 결과 저장 디렉토리
-        
-    Returns:
-        accuracy: 전체 시뮬레이션에 대한 정확도
-        predictions: 시뮬레이션별 예측 결과
-        true_labels: 시뮬레이션별 실제 라벨
     """
     model.eval()
     predictions_by_sim = {}  # 시뮬레이션별 예측값 저장
@@ -141,11 +188,11 @@ def evaluate_model(model, test_loader, device, save_dir):
     
     with torch.no_grad():
         for batch in test_loader:
-            inputs = batch["shot"].to(device)
+            inputs = batch["shot"].to(device)  # [B, 50, 52]
             labels = batch["label"].to(device)
             sim_indices = batch["sim_idx"].to(device)
             
-            # 모델 예측
+            # Fault 분류 예측
             type_logits, _ = model(inputs, sim_indices)
             type_logits = type_logits.transpose(1, 2)
             batch_preds = torch.argmax(type_logits, dim=1)
@@ -156,11 +203,13 @@ def evaluate_model(model, test_loader, device, save_dir):
             sim_indices = sim_indices.cpu().numpy()
             
             # 시뮬레이션별로 예측값 수집 (순서 유지)
-            for i, (pred, label, idx) in enumerate(zip(batch_preds, batch_labels, sim_indices)):
-                if idx not in predictions_by_sim:
-                    predictions_by_sim[idx] = []
-                    labels_by_sim[idx] = label
-                predictions_by_sim[idx].extend(pred)
+            for i, (pred, label, sim_idx) in enumerate(zip(batch_preds, batch_labels, sim_indices)):
+                sim_idx = int(sim_idx)  # numpy int를 파이썬 int로 변환
+                
+                if sim_idx not in predictions_by_sim:
+                    predictions_by_sim[sim_idx] = []
+                    labels_by_sim[sim_idx] = int(label)  # 라벨도 정수로 변환
+                predictions_by_sim[sim_idx].extend([int(p) for p in pred])  # 예측값도 정수로 변환
     
     # 순차적 투표 결과 출력
     logger = logging.getLogger(__name__)
@@ -278,7 +327,7 @@ def save_results(results, save_dir):
 
 
 @click.command()
-@click.option('--model_path', type=str, default='model_pretrained/model1/19_epoch_checkpoint.pth', help='학습된 discriminator 모델 경로 (.pth 파일)')
+@click.option('--model_path', type=str, default='model_pretrained/model1/30_epoch_checkpoint.pth', help='학습된 discriminator 모델 경로 (.pth 파일)')
 @click.option('--test_data', type=str, default='data/test_X_model1.npy', help='테스트 데이터 NPY 파일 경로')
 @click.option('--test_labels', type=str, default='data/test_y_model1.npy', help='테스트 라벨 NPY 파일 경로')
 @click.option('--cuda', type=int, default=0, help='사용할 GPU 번호')
@@ -325,35 +374,14 @@ def main(model_path, test_data, test_labels, cuda, batch_size, save_dir, random_
         num_workers=0  # Windows에서의 multiprocessing 문제 해결을 위해 0으로 설정
     )
     
-    # 데이터셋 상세 정보 확인
-    logger.info("\n데이터셋 상세 정보:")
-    
-    # 첫 번째 배치 가져오기
-    first_batch = next(iter(test_loader))
-    logger.info(f"배치 데이터 shape: {first_batch['shot'].shape}")
-    logger.info(f"배치 라벨 shape: {first_batch['label'].shape}")
-    logger.info(f"배치 시뮬레이션 인덱스 shape: {first_batch['sim_idx'].shape}")
-    
-    # 시뮬레이션 인덱스 분포 확인
-    sim_indices = first_batch['sim_idx'].numpy()
-    unique_sims = np.unique(sim_indices)
-    logger.info(f"\n시뮬레이션 인덱스 정보:")
-    logger.info(f"배치 내 고유 시뮬레이션 수: {len(unique_sims)}")
-    logger.info(f"시뮬레이션 인덱스 범위: {sim_indices.min()} ~ {sim_indices.max()}")
-    
-    # 첫 번째 배치의 일부 데이터 출력
-    logger.info("\n첫 번째 배치 샘플 (처음 5개):")
-    for i in range(min(5, len(sim_indices))):
-        logger.info(f"샘플 {i}:")
-        logger.info(f"  - 시뮬레이션 인덱스: {sim_indices[i]}")
-        logger.info(f"  - 라벨: {first_batch['label'][i].argmax().item()}")
-    
-    # 모델 로드
+    # Fault 분류 모델 로드
     model = load_model(model_path, device)
     
     # 모델 평가
     logger.info("모델 평가 시작...")
-    accuracy, predictions, labels = evaluate_model(model, test_loader, device, save_dir)
+    accuracy, predictions, labels = evaluate_model(
+        model, test_loader, device, save_dir
+    )
     logger.info(f"평가 완료. 정확도: {accuracy:.4f}")
     
     # 결과 분석
