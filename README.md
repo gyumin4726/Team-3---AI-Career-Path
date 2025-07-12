@@ -1,4 +1,4 @@
-# Tennessee Eastman Process 결함 탐지 - Temporal Deep Learning 모델
+# Tennessee Eastman Process (TEP) 공정 이상 탐지 및 정상화 파이프라인
 
 ## 팀 정보
 **2025 AI 커리어패스 프로그램 - 팀3**
@@ -9,46 +9,42 @@
 
 ## 프로젝트 개요
 
-**핵심 모델: GAN v5**
-- CNN1D2D + GAN 결합 아키텍처
-- 멀티태스크 학습: 결함 분류 + 데이터 생성 + 실제/가짜 판별
-- 시계열 패턴 학습: LSTM Generator + CNN1D2D Discriminator
+**4단계 공정 이상 분석 및 정상화 시스템**
+- Model1: Fault 시점 탐지 + Fault 종류 분류 (CNN1D2D Discriminator)
+- Model2: 조작 변수 정상화 (Conditional TCN-AE) - **추후 추가 예정**
+- Model3: 반응 변수 예측 (RSSM) - **추후 추가 예정**
+- Model4: 정상 여부 재분류 (Model1 재사용)
 
 **주요 특징**
 - 52개 센서 데이터 기반 시계열 분석
 - 21가지 결함 유형 분류 (정상상태 포함)
-- 하이브리드 딥러닝 아키텍처 (CNN1D2D + GAN)
-- Multitask Learning 접근법
-- 데이터 생성 및 증강 기능
+- 슬라이딩 윈도우 기반 배치 처리 (50, 10)
+- 반복 정상화 파이프라인 (최대 3회)
+- LLM 기반 결과 해설 (추후 활성화 예정)
 
 ## 프로젝트 구조
 
 ```
 tennessee_eastman_diploma/
 ├── src/
+│   ├── main/              # 메인 파이프라인
+│   │   ├── pipeline.py    # TEP 전체 파이프라인
+│   │   └── model1_module.py  # Model1 모듈
+│   ├── model1/            # Model1 관련 코드
+│   │   ├── convolutional_models.py    # CNN1D2D 모델
+│   │   ├── evaluate_model.py          # 모델 평가
+│   │   └── train_model.py             # 모델 훈련
 │   ├── data/              # 데이터 처리 및 로딩
-│   │   ├── dataset.py     # TEP 데이터셋 클래스들
-│   ├── models/            # 딥러닝 모델 구현
-│   │   ├── convolutional_models.py    # TCN, CNN1D2D 모델
-│   │   ├── recurrent_models.py        # LSTM 기반 모델
-│   │   ├── train_model.py      # GAN v5 모델 훈련 (메인)
-│   │   ├── evaluate_model.py      # 모델 평가 스크립트
-│   │   └── utils.py                   # 유틸리티 함수
-├── data/                # 데이터셋 저장소
-│   ├── train_faults/    # 훈련용 CSV 파일들
-│   │   ├── train_fault_0.csv  # 정상 운전 데이터
-│   │   ├── train_fault_1.csv  # 결함 1 데이터
-│   │   ├── train_fault_2.csv  # 결함 2 데이터
-│   │   ├── ...
-│   │   └── train_fault_12.csv # 결함 12 데이터
-│   └── test_faults/     # 테스트용 CSV 파일들
-│       ├── test_fault_0.csv   # 정상 운전 테스트 데이터
-│       ├── test_fault_1.csv   # 결함 1 테스트 데이터
-│       ├── test_fault_2.csv   # 결함 2 테스트 데이터
-│       ├── ...
-│       └── test_fault_12.csv  # 결함 12 테스트 데이터
-├── models/              # 훈련된 모델 저장소
-├── setup.py             # 프로젝트 설정 파일
+│   │   └── dataset.py     # TEP 데이터셋 클래스들
+│   └── LLM/               # LLM 관련 코드 (추후 활성화)
+├── data/                  # 데이터셋 저장소
+│   ├── final_X.npy        # 전처리된 입력 데이터
+│   └── final_Y.npy        # 전처리된 라벨 데이터
+├── model_pretrained/      # 사전 훈련된 모델
+│   └── model1/
+│       └── 30_epoch_checkpoint.pth
+├── logs/                  # 로그 파일
+└── setup.py               # 프로젝트 설정 파일
 ```
 
 ## 데이터셋 정보
@@ -58,22 +54,48 @@ tennessee_eastman_diploma/
 - 결함 유형: 21가지 (정상상태 포함)
 - 샘플링 주기: 3분
 
+**슬라이딩 윈도우 처리**
+- 원본 데이터: 0~959 시점 (960개)
+- 윈도우 크기: 50
+- 스텝 크기: 10
+- 확장된 데이터: 0~4599 시점 (4600개 윈도우)
+
 **데이터 구조**
 ```python
-# 훈련 데이터: 21 × 500 × 500 = 5,250,000 샘플
-# 테스트 데이터: 21 × 500 × 960 = 10,080,000 샘플
+# 입력 데이터: (B, 50, 52)
+# B: 배치 크기 (시뮬레이션 런 수)
+# 50: 윈도우 크기
+# 52: 센서 개수
 ```
 
-**결함 특성**
-- 정상 운전: 처음 1시간 (20샘플)
-- 결함 발생: 1시간 후부터 (21번째 샘플부터)
-- 결함 유형: IDV(1) ~ IDV(20) + 정상상태(0)
+## 파이프라인 동작 원리
+
+### 1단계: Model1 (Fault 탐지 + 분류)
+- **LSTM GENERATOR + CNN1D2D Discriminator** 사용
+- 슬라이딩 윈도우 기반 배치 처리
+- Fault 시점 탐지 (0~4599 → 0~959 변환)
+- Fault 종류 분류 (21가지)
+- 정상 상태 감지 시 파이프라인 조기 종료
+
+### 2단계: Model2 (조작 변수 정상화) - 추후 추가 예정
+- KNN?? 사용
+- 조작 변수만 추출하여 정상화
+- Fault 정보를 조건으로 사용
+
+### 3단계: Model3 (반응 변수 예측) - 추후 추가 예정
+- ?? 사용
+- 정상화된 조작 변수를 기반으로 반응 변수 예측
+- Fault 정보를 조건으로 사용
+
+### 4단계: Model4 (정상 여부 재분류)
+- **Model1 재사용**
+- 정상화된 데이터 (m' + x')를 입력으로 사용
+- 정상 분류 시: 정상화 완료, 파이프라인 종료
+- 비정상 분류 시: Model2로 반복 (최대 3회)
 
 ## 사용 방법
 
 ### 1. 환경 설정
-
-**CONDA 환경 구성**
 
 ```bash
 # 1. 새 CONDA 환경 생성
@@ -95,126 +117,69 @@ pip install -e .
 
 ### 2. 데이터 준비
 
-**필수: CSV 데이터 파일**
-
-GAN v5 모델 훈련에는 다음 CSV 파일들이 필요합니다:
+**필수: NPY 데이터 파일**
 
 ```bash
-# 훈련 데이터
-data/train_faults/
-├── train_fault_0.csv  # 정상 운전 (18MB)
-├── train_fault_1.csv  # 결함 1 (18MB)
-├── train_fault_2.csv  # 결함 2 (18MB)
-├── ...
-└── train_fault_12.csv # 결함 12 (18MB)
-
-# 테스트 데이터
-data/test_faults/
-├── test_fault_0.csv   # 정상 운전 (34MB)
-├── test_fault_1.csv   # 결함 1 (34MB)
-├── test_fault_2.csv   # 결함 2 (34MB)
-├── ...
-└── test_fault_12.csv  # 결함 12 (34MB)
+data/
+├── final_X.npy  # 전처리된 입력 데이터
+└── final_Y.npy  # 전처리된 라벨 데이터
 ```
 
-**CSV 파일 형식:**
-- 각 파일: 100개 시뮬레이션 런
-- 훈련: 런당 500 시점 (25시간)
-- 테스트: 런당 960 시점 (48시간) 
-- 센서: 52개 (xmeas_1~xmeas_41, xmv_1/~xmv_11)
+### 3. 파이프라인 실행
 
-
-### 3. 모델 훈련
-
-**메인 모델 훈련**
+**메인 파이프라인 실행**
 
 ```bash
-# CNN1D2D+GAN 하이브리드 모델
-python -m src.models.train_model --cuda 0 --run_tag main_model
-python -m src.models.train_model --cuda 0 --run_tag resumed_training --resume_from "models/[모델ID]/weights/[에폭번호]_epoch_checkpoint.pth"
+# 전체 파이프라인 실행
+python src/main/pipeline.py
 ```
 
-이 하나의 명령으로 전체 시스템이 완성됩니다:
-- 시계열 데이터 생성 (Generator)
-- 결함 분류 (13개 클래스: 정상 + 12가지 결함)  
-- 정상/비정상 판별
-- 멀티태스크 학습
+**파이프라인 동작 과정**
+1. Model1: Fault 탐지 및 분류
+2. 정상 상태 → 파이프라인 종료
+3. 비정상 상태 → Model2, Model3, Model4 실행
+4. Model4 결과에 따라 반복 또는 종료
 
-**주요 옵션:**
-- `--cuda 0`: GPU 번호 (0번 GPU 사용, 필수 옵션)
-- `--run_tag main_model`: 실험 태그 (로그 구분용)
+## Model1 상세 정보
 
+### CNN1D2D Discriminator 구조
+- **1D Convolution**: 시계열 패턴 학습
+- **2D Convolution**: 센서 간 상관관계 학습
+- **Multitask Learning**: 결함 분류 + 실제/가짜 판별
+- **배치 처리**: 슬라이딩 윈도우 기반
 
-## GAN v5 모델 구조 및 작동 원리
-
-### 모델 아키텍처
-
-**GAN v5는 전통적인 데이터 증강 방식이 아닌 적대적 학습(Adversarial Training)을 활용한 robust한 결함 분류 모델입니다.**
-
-#### 구성 요소
-1. **Generator (LSTMGenerator)**
-   - 역할: 가짜 TEP 시계열 데이터 생성
-   - 입력: 노이즈(100차원) + 결함 유형 라벨(1차원)
-   - 출력: 52개 센서의 시계열 데이터 (500 시간 스텝)
-
-2. **Discriminator (CNN1D2DDiscriminatorMultitask)**
-   - 역할: 실제/가짜 구별 + 결함 분류 (멀티태스크)
-   - 입력: 시계열 데이터 (실제 또는 가짜)
-   - 출력: 
-     - `type_logits`: 결함 유형 분류 (13개 클래스: 정상 + 12가지 결함)
-     - `real_fake_logits`: 실제/가짜 확률
-
-### 훈련 과정
-
-#### 1. Discriminator 훈련
+### 슬라이딩 윈도우 변환
 ```python
-# 실제 데이터로 훈련
-real_inputs, fault_labels = data["shot"], data["label"]  # CSV 파일에서 로드
-type_logits, fake_logits = netD(real_inputs, None)
-errD_type_real = cross_entropy_criterion(type_logits, fault_labels)  # 결함 분류 학습
-errD_real = binary_criterion(fake_logits, REAL_LABEL)  # 실제 데이터 판별
-
-# 가짜 데이터로 훈련
-fake_inputs = netG(noise, labels)
-type_logits, fake_logits = netD(fake_inputs.detach(), None)
-errD_fake = binary_criterion(fake_logits, FAKE_LABEL)  # 가짜 데이터 판별
+# 슬라이딩 윈도우 시점 → 원본 시점 변환
+window_num = window_index // window_size
+timestep_in_window = window_index % window_size
+original_time = window_num * step_size + timestep_in_window
 ```
 
-#### 2. Generator 훈련
-```python
-# Generator가 Discriminator를 속이도록 훈련
-type_logits, fake_logits = netD(fake_inputs, None)
-errG = binary_criterion(fake_logits, REAL_LABEL)  # 가짜를 진짜로 분류하도록
+### 결과 출력
+- **파이프라인 모델들**: 슬라이딩 윈도우 인덱스 (0~4599)
+- **LLM**: 원본 시점 (0~959)
 
-# 실제 데이터와 유사성 추구
-errG_similarity = similarity(generated_data, real_inputs)
-```
+## 향후 개발 계획
 
+### Model2 (조작 변수 정상화)
+- Conditional TCN-AE 구현
+- 조작 변수 (11개) 추출 및 정상화
+- Fault 정보를 조건으로 사용
 
-### 버전별 모델 조합
+### Model3 (반응 변수 예측)
+- RSSM (Recurrent State Space Model) 구현
+- 정상화된 조작 변수 기반 반응 변수 예측
+- 시계열 예측 모델
 
-| 버전 | Generator | Discriminator | 특징 | 사용 목적 |
-|------|-----------|---------------|------|----------|
-| **GAN v5** | LSTM | CNN1D2D | 하이브리드 멀티태스크 | **메인 모델** (최고 성능) |
-| **GAN v4** | LSTM | CausalConv | 멀티태스크 | 성능 비교 |
-| **GAN v3** | CausalConv | CausalConv | 순수 CNN GAN | 실험/비교 |
-| **GAN v2** | ❌ | TEPRNN | 순수 RNN | 베이스라인 |
-| **베이스라인** | ❌ | CausalConv | 단순 분류 | 베이스라인 |
+### LLM 통합
+- Gemini API 연동
+- 결과 해설 및 분석
+- 사용자 친화적 출력
 
+### 파이프라인 실행 (미완)
 
-## 모델 평가
-
-### GAN v5 모델 평가
-
-학습이 완료된 후 테스트 데이터로 모델 성능을 평가할 수 있습니다.
-
-#### 사용법
 ```bash
-# 학습 완료된 discriminator 모델 평가 (결함 분류)
-python -m src.models.evaluate_model --model_path models/5_main_model/weights/199_epoch_discriminator.pth --cuda 0
+# 전체 파이프라인 테스트
+python src/main/pipeline.py
 ```
-
-#### 파라미터 설명
-- `--cuda`: 사용할 GPU 번호 (0, 1, 2, ...)
-- `--model_path`: 학습된 discriminator 모델 파일 경로
-- `--random_seed`: 랜덤 시드 (옵션)
