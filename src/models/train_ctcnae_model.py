@@ -98,6 +98,12 @@ def main(train_data, train_labels, cuda, batch_size, epochs, lr, channels, kerne
     logger.info(f"측정값(m) shape: {first_data['shot'][:, :11].shape}")  # [50, 11]
     logger.info(f"라벨: {first_data['label']}")
     
+    # 전체 데이터셋 크기 출력
+    logger.info(f"\n전체 훈련 데이터셋 크기:")
+    logger.info(f"데이터셋 길이: {len(train_dataset)}")
+    logger.info(f"전체 데이터 shape: {train_dataset.data.shape if hasattr(train_dataset, 'data') else 'N/A'}")
+    logger.info(f"전체 라벨 shape: {train_dataset.labels.shape if hasattr(train_dataset, 'labels') else 'N/A'}")
+    
     # 데이터 로더 생성
     train_loader = DataLoader(
         train_dataset,
