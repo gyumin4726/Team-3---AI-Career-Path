@@ -15,6 +15,10 @@ import logging
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 from collections import defaultdict
+from typing import Dict, List, Tuple
+import seaborn as sns
+from sklearn.metrics import mean_squared_error, mean_absolute_error
+import json
 
 from src.data.dataset import TEPNPYDataset, CSVToTensor
 from src.models.transformer_models import MTCNAutoencoder
@@ -214,6 +218,224 @@ def save_results(results, save_dir):
     with open(results_path, 'w') as f:
         import json
         json.dump(results, f, indent=2)
+
+
+class ConditionalTCNAEEvaluator:
+    """Conditional TCN-AE 모델 평가기"""
+    
+    def __init__(self, model: torch.nn.Module, device: torch.device):
+        self.model = model
+        self.device = device
+        self.model.eval()
+        
+    def calculate_metrics(self, 
+                         original_m: torch.Tensor,
+                         normalized_m: torch.Tensor,
+                         fault_mask: torch.Tensor) -> Dict[str, float]:
+        """
+        정상화 성능 메트릭 계산
+        
+        Args:
+            original_m: 원본 조작변수 (B, T, M)
+            normalized_m: 정상화된 조작변수 (B, T, M)
+            fault_mask: Fault 발생 구간 마스크 (B, T), True=fault 구간
+            
+        Returns:
+            Dict[str, float]: 평가 메트릭
+        """
+        # Fault 구간만 선택
+        original_fault = original_m[fault_mask]
+        normalized_fault = normalized_m[fault_mask]
+        
+        # 기본 메트릭
+        metrics = {
+            "mse": float(mean_squared_error(original_fault, normalized_fault)),
+            "mae": float(mean_absolute_error(original_fault, normalized_fault)),
+            "rmse": float(np.sqrt(mean_squared_error(original_fault, normalized_fault)))
+        }
+        
+        # 변수별 정규화 효과 (변동성 감소율)
+        var_reduction = {}
+        for i in range(original_m.size(-1)):
+            orig_std = torch.std(original_fault[:, i]).item()
+            norm_std = torch.std(normalized_fault[:, i]).item()
+            reduction = (orig_std - norm_std) / orig_std * 100
+            var_reduction[f"mv{i+1}_reduction"] = float(reduction)
+        
+        metrics.update(var_reduction)
+        
+        # 정상화 신뢰도 점수 (0~1)
+        # 1에 가까울수록 정상 범위 내 값으로 정상화됨
+        confidence = self._calculate_normalization_confidence(
+            original_fault, normalized_fault
+        )
+        metrics["normalization_confidence"] = float(confidence)
+        
+        return metrics
+    
+    def _calculate_normalization_confidence(self,
+                                         original: torch.Tensor,
+                                         normalized: torch.Tensor,
+                                         std_threshold: float = 2.0) -> float:
+        """
+        정상화 신뢰도 계산
+        - 정상 범위를 벗어난 값들이 얼마나 정상 범위로 돌아왔는지 계산
+        
+        Args:
+            original: 원본 데이터
+            normalized: 정상화된 데이터
+            std_threshold: 정상 범위 기준 (표준편차의 몇 배)
+        """
+        # 각 변수별 정상 범위 계산
+        means = torch.mean(original, dim=0)
+        stds = torch.std(original, dim=0)
+        
+        # 정상 범위를 벗어난 값들의 마스크
+        upper_bound = means + std_threshold * stds
+        lower_bound = means - std_threshold * stds
+        
+        abnormal_mask = (original > upper_bound) | (original < lower_bound)
+        
+        # 정상화 후 정상 범위 내로 들어온 값들의 비율
+        normalized_normal = (normalized <= upper_bound) & (normalized >= lower_bound)
+        recovery_ratio = torch.sum(normalized_normal[abnormal_mask]).float() / \
+                        torch.sum(abnormal_mask).float()
+        
+        return recovery_ratio.item()
+    
+    def evaluate_fault_type(self,
+                          m_seq: torch.Tensor,
+                          fault_type: torch.Tensor,
+                          fault_time: torch.Tensor) -> Dict[str, float]:
+        """
+        특정 Fault 타입에 대한 정상화 성능 평가
+        
+        Args:
+            m_seq: 조작변수 시퀀스 (B, T, M)
+            fault_type: Fault 타입 (B, fault_dim)
+            fault_time: Fault 발생 시점 (B,)
+        """
+        self.model.eval()
+        with torch.no_grad():
+            # 모델 예측
+            normalized_m = self.model(m_seq, fault_type, fault_time)
+            
+            # Fault 발생 구간 마스크 생성
+            batch_size, seq_len = m_seq.size(0), m_seq.size(1)
+            fault_mask = torch.zeros((batch_size, seq_len), dtype=torch.bool)
+            for i, t in enumerate(fault_time):
+                fault_mask[i, t:] = True
+            
+            # 메트릭 계산
+            metrics = self.calculate_metrics(m_seq, normalized_m, fault_mask)
+            
+        return metrics
+    
+    def evaluate_all_faults(self,
+                          test_loader: torch.utils.data.DataLoader,
+                          save_dir: str = None) -> Dict[str, Dict[str, float]]:
+        """
+        모든 Fault 타입에 대한 종합 평가
+        
+        Args:
+            test_loader: 테스트 데이터 로더
+            save_dir: 결과 저장 디렉토리 (옵션)
+        """
+        fault_metrics = {}
+        
+        for batch in test_loader:
+            m_seq = batch['m_seq'].to(self.device)
+            fault_type = batch['fault_type'].to(self.device)
+            fault_time = batch['fault_time'].to(self.device)
+            
+            # Fault 타입 인덱스 추출
+            fault_idx = torch.argmax(fault_type[0]).item()
+            
+            # 해당 Fault 타입 평가
+            metrics = self.evaluate_fault_type(m_seq, fault_type, fault_time)
+            
+            if fault_idx not in fault_metrics:
+                fault_metrics[fault_idx] = {
+                    'samples': 0,
+                    'metrics': {k: 0.0 for k in metrics.keys()}
+                }
+            
+            # 메트릭 누적
+            fault_metrics[fault_idx]['samples'] += 1
+            for k, v in metrics.items():
+                fault_metrics[fault_idx]['metrics'][k] += v
+        
+        # 평균 계산
+        for fault_idx in fault_metrics:
+            samples = fault_metrics[fault_idx]['samples']
+            for k in fault_metrics[fault_idx]['metrics']:
+                fault_metrics[fault_idx]['metrics'][k] /= samples
+        
+        # 결과 저장
+        if save_dir:
+            os.makedirs(save_dir, exist_ok=True)
+            
+            # 메트릭 저장
+            with open(os.path.join(save_dir, 'metrics.json'), 'w') as f:
+                json.dump(fault_metrics, f, indent=2)
+            
+            # 시각화
+            self._plot_metrics(fault_metrics, save_dir)
+        
+        return fault_metrics
+    
+    def _plot_metrics(self, fault_metrics: Dict[str, Dict[str, float]], save_dir: str):
+        """평가 결과 시각화"""
+        # 1. MSE, MAE, RMSE 비교
+        basic_metrics = ['mse', 'mae', 'rmse']
+        fault_types = list(fault_metrics.keys())
+        
+        fig, axes = plt.subplots(1, len(basic_metrics), figsize=(15, 5))
+        for i, metric in enumerate(basic_metrics):
+            values = [fault_metrics[f]['metrics'][metric] for f in fault_types]
+            axes[i].bar(fault_types, values)
+            axes[i].set_title(f'{metric.upper()} by Fault Type')
+            axes[i].set_xlabel('Fault Type')
+            axes[i].set_ylabel(metric.upper())
+        plt.tight_layout()
+        plt.savefig(os.path.join(save_dir, 'basic_metrics.png'))
+        plt.close()
+        
+        # 2. 변수별 정규화 효과 히트맵
+        var_metrics = [k for k in fault_metrics[0]['metrics'].keys() 
+                      if k.startswith('mv') and k.endswith('reduction')]
+        values = np.zeros((len(fault_types), len(var_metrics)))
+        
+        for i, fault in enumerate(fault_types):
+            for j, metric in enumerate(var_metrics):
+                values[i, j] = fault_metrics[fault]['metrics'][metric]
+        
+        plt.figure(figsize=(12, 8))
+        sns.heatmap(values, 
+                   xticklabels=[v.replace('_reduction', '') for v in var_metrics],
+                   yticklabels=fault_types,
+                   annot=True, 
+                   fmt='.1f',
+                   cmap='RdYlBu')
+        plt.title('Variance Reduction (%) by Variable and Fault Type')
+        plt.xlabel('Manipulated Variables')
+        plt.ylabel('Fault Type')
+        plt.tight_layout()
+        plt.savefig(os.path.join(save_dir, 'variance_reduction.png'))
+        plt.close()
+        
+        # 3. 정상화 신뢰도 점수
+        plt.figure(figsize=(10, 6))
+        confidence_scores = [fault_metrics[f]['metrics']['normalization_confidence'] 
+                           for f in fault_types]
+        plt.bar(fault_types, confidence_scores)
+        plt.title('Normalization Confidence Score by Fault Type')
+        plt.xlabel('Fault Type')
+        plt.ylabel('Confidence Score')
+        plt.ylim(0, 1)
+        plt.tight_layout()
+        plt.savefig(os.path.join(save_dir, 'confidence_scores.png'))
+        plt.close()
 
 
 @click.command()
