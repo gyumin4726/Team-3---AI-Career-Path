@@ -305,7 +305,7 @@ def save_results(results, save_dir):
 @click.option('--train_labels', type=str, default='data/test_Y_model2.npy', help='훈련 라벨 NPY 파일 경로')
 @click.option('--cuda', type=int, default=0, help='사용할 GPU 번호')
 @click.option('--batch_size', type=int, default=128, help='배치 크기')
-@click.option('--save_dir', type=str, default='evaluation_results/ctcnae', help='결과 저장 디렉토리')
+@click.option('--save_dir', type=str, default='evaluation_results/model2', help='결과 저장 디렉토리')
 def main(model_path, test_data, test_labels, cuda, batch_size, save_dir):
     """
     C-TCN-AE 모델 평가 메인 함수

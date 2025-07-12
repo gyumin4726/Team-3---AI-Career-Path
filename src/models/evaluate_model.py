@@ -332,7 +332,7 @@ def save_results(results, save_dir):
 @click.option('--test_labels', type=str, default='data/test_y_model1.npy', help='테스트 라벨 NPY 파일 경로')
 @click.option('--cuda', type=int, default=0, help='사용할 GPU 번호')
 @click.option('--batch_size', type=int, default=128, help='배치 크기')
-@click.option('--save_dir', type=str, default='model1_evaluation_results', help='결과 저장 디렉토리')
+@click.option('--save_dir', type=str, default='evaluation_results/model1', help='결과 저장 디렉토리')
 @click.option('--random_seed', type=int, default=42, help='랜덤 시드')
 def main(model_path, test_data, test_labels, cuda, batch_size, save_dir, random_seed):
     """
