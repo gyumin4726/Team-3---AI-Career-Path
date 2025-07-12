@@ -2,6 +2,10 @@
 __pycache__/
 *.py[cod]
 
+# API Keys
+MY_KEY.txt
+src/LLM/MY_KEY.txt
+
 # C extensions
 *.so
 
