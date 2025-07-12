@@ -59,10 +59,10 @@ def train_epoch(model, train_loader, optimizer, device):
 
 
 @click.command()
-@click.option('--train_data', type=str, default='data/train_X.npy', help='훈련 데이터 NPY 파일 경로')
-@click.option('--train_labels', type=str, default='data/train_intY.npy', help='훈련 라벨 NPY 파일 경로')
+@click.option('--train_data', type=str, default='data/train_X_model2.npy', help='훈련 데이터 NPY 파일 경로')
+@click.option('--train_labels', type=str, default='data/train_Y_model2.npy', help='훈련 라벨 NPY 파일 경로')
 @click.option('--cuda', type=int, default=0, help='사용할 GPU 번호')
-@click.option('--batch_size', type=int, default=32, help='배치 크기')
+@click.option('--batch_size', type=int, default=128, help='배치 크기')
 @click.option('--epochs', type=int, default=100, help='학습 에포크 수')
 @click.option('--lr', type=float, default=0.001, help='학습률')
 @click.option('--channels', type=str, default='32,64,64', help='TCN 채널 크기 (콤마로 구분)')
@@ -74,9 +74,10 @@ def main(train_data, train_labels, cuda, batch_size, epochs, lr, channels, kerne
     logger = setup_logger()
     
     # 저장 디렉토리 설정
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    save_dir = f"models/ctcnae_{timestamp}"
+    save_dir = f"model_pretrained/model2"
     os.makedirs(save_dir, exist_ok=True)
+    os.makedirs("model_pretrained", exist_ok=True)
+    os.makedirs("model_pretrained/model2", exist_ok=True)
     
     # GPU 설정
     device = torch.device(f"cuda:{cuda}" if torch.cuda.is_available() else "cpu")
@@ -148,15 +149,16 @@ def main(train_data, train_labels, cuda, batch_size, epochs, lr, channels, kerne
             }, checkpoint_path)
             logger.info(f"모델 저장됨: {checkpoint_path}")
         
-        # 주기적으로 체크포인트 저장
+        # 주기적으로 체크포인트 저장 (10 에포크마다)
         if (epoch + 1) % 10 == 0:
-            checkpoint_path = os.path.join(save_dir, f"checkpoint_epoch_{epoch+1}.pth")
+            checkpoint_path = os.path.join(save_dir, f"{epoch+1}_epoch_checkpoint.pth")
             torch.save({
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'train_loss': train_loss,
             }, checkpoint_path)
+            logger.info(f"체크포인트 저장됨: {checkpoint_path}")
     
     logger.info("학습 완료!")
 
