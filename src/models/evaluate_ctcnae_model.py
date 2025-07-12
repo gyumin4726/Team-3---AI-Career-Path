@@ -336,6 +336,12 @@ def main(model_path, test_data, test_labels, cuda, batch_size, save_dir):
     logger.info(f"측정값(m) shape: {first_data['shot'][:, :11].shape}")  # [50, 11]
     logger.info(f"라벨: {first_data['label']}")
     
+    # 전체 데이터셋 크기 출력
+    logger.info(f"\n전체 테스트 데이터셋 크기:")
+    logger.info(f"데이터셋 길이: {len(test_dataset)}")
+    logger.info(f"전체 데이터 shape: {test_dataset.data.shape if hasattr(test_dataset, 'data') else 'N/A'}")
+    logger.info(f"전체 라벨 shape: {test_dataset.labels.shape if hasattr(test_dataset, 'labels') else 'N/A'}")
+    
     # 데이터 로더 생성
     test_loader = DataLoader(
         test_dataset,
