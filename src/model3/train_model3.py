@@ -156,12 +156,12 @@ def main(cuda, run_tag, random_seed, resume_from):
             # Model3: 과거 X + 과거 M + 미래 M → 미래 X 예측
             x_fut_pred = netM3(x_ctx, m_ctx, m_fut)  # (B, T, 41) - 반응 변수만 예측
 
-            # 손실 계산
-            mse_loss = mse_criterion(x_fut_pred, x_fut_gt)
-            mae_loss = mae_criterion(x_fut_pred, x_fut_gt)
+            # 손실 계산 (가중치 적용)
+            mse_loss = 10.0 * mse_criterion(x_fut_pred, x_fut_gt)
+            mae_loss = 1.0 * mae_criterion(x_fut_pred, x_fut_gt)
             
             # 전체 손실 (MSE + MAE)
-            total_loss_batch = 10.0 * mse_loss + 1.0 * mae_loss
+            total_loss_batch = mse_loss + mae_loss
             
             total_loss_batch.backward()
             optimizerM3.step()
