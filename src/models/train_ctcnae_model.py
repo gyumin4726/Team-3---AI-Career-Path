@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Tennessee Eastman Process C-TCN-AE 모델 학습 스크립트
-Conditional Temporal Convolutional Network Autoencoder를 사용하여 조건부 시퀀스 학습
+Tennessee Eastman Process 정상화 C-TCN-AE 모델 학습 스크립트
+고장 데이터를 진짜 정상으로 재구성하도록 학습
 """
 
 import os
@@ -25,28 +25,48 @@ def setup_logger():
     return logging.getLogger(__name__)
 
 
-def train_epoch(model, train_loader, optimizer, device):
-    """한 에포크 학습"""
+def train_epoch(model, train_loader, normal_dataset, optimizer, device):
+    """한 에포크 학습 - 고장→정상 정상화 모델"""
     model.train()
     total_loss = 0
     
     for i, batch in enumerate(train_loader):
-        # 측정값(m)과 라벨 사용
-        m_seq = batch["shot"].to(device)  # [B, 50, 11] - 측정값만 사용
-        fault_labels = batch["label"].to(device)  # [B,] - 라벨
+        # 고장 데이터 (입력)
+        m_seq = batch["shot"].to(device)  # [B, 50, 11] - 고장 데이터
+        fault_labels = batch["label"].to(device)  # [B,] - 고장 라벨
+        batch_size = m_seq.size(0)  # 현재 배치 크기
+        
+        # 고장 데이터의 인덱스를 기반으로 정상 데이터 가져오기
+        # 고장 데이터셋의 인덱스를 정상 데이터셋의 인덱스로 변환
+        fault_indices = batch.get("index", torch.arange(len(batch["shot"])))  # 배치 내 인덱스
+        
+        # 정상 데이터 가져오기 (고장과 같은 순서)
+        normal_seqs = []
+        for idx in fault_indices:
+            # 고장 인덱스를 정상 인덱스로 변환 (같은 시뮬레이션)
+            normal_idx = idx % len(normal_dataset)  # 정상 데이터셋 크기로 모듈로
+            normal_data = normal_dataset[normal_idx]
+            normal_seqs.append(normal_data["shot"])
+        
+        normal_seq = torch.stack(normal_seqs).to(device)  # [B, 50, 11] - 정상 데이터
+        normal_labels = torch.zeros(batch_size, dtype=torch.long).to(device)  # [B,] - 정상 라벨 (모두 0)
         
         # 첫 배치의 shape 출력
         if i == 0:
             logger = logging.getLogger(__name__)
-            logger.info(f"m_seq shape: {m_seq.shape}")  # [B, 50, 11]
-            logger.info(f"fault_labels shape: {fault_labels.shape}")  # [B,]
-            logger.info(f"fault_labels 고유값: {torch.unique(fault_labels).cpu().numpy()}")
+            logger.info(f"고장 입력 shape: {m_seq.shape}")
+            logger.info(f"고장 라벨 shape: {fault_labels.shape}")
+            logger.info(f"고장 라벨 고유값: {torch.unique(fault_labels).cpu().numpy()}")
+            logger.info(f"정상 타겟 shape: {normal_seq.shape}")
+            logger.info(f"정상 라벨 shape: {normal_labels.shape}")
+            logger.info(f"정상 라벨 고유값: {torch.unique(normal_labels).cpu().numpy()}")
         
-        # Forward pass (조건부 모델)
-        m_rec = model(m_seq, fault_labels)
+        # 정상화 모델: 고장 데이터를 정상으로 재구성
+        normal_condition = torch.zeros_like(fault_labels)  # 모든 조건을 정상(0)으로
+        m_rec = model(m_seq, normal_condition)
         
-        # Loss 계산 (MSE)
-        loss = torch.nn.functional.mse_loss(m_rec, m_seq)
+        # Loss 계산 (MSE) - 고장 데이터를 진짜 정상으로 재구성하는 성능
+        loss = torch.nn.functional.mse_loss(m_rec, normal_seq)
         
         # Backward pass
         optimizer.zero_grad()
@@ -69,7 +89,8 @@ def train_epoch(model, train_loader, optimizer, device):
 @click.option('--kernel_size', type=int, default=3, help='TCN 커널 크기')
 def main(train_data, train_labels, cuda, batch_size, epochs, lr, channels, kernel_size):
     """
-    C-TCN-AE 모델 학습 메인 함수
+    정상화 C-TCN-AE 모델 학습 메인 함수
+    고장 데이터를 진짜 정상으로 재구성하도록 학습
     """
     logger = setup_logger()
     
@@ -83,47 +104,50 @@ def main(train_data, train_labels, cuda, batch_size, epochs, lr, channels, kerne
     device = torch.device(f"cuda:{cuda}" if torch.cuda.is_available() else "cpu")
     logger.info(f"장치: {device}")
     
-    # 데이터셋 생성 (모든 fault 타입 포함)
-    train_dataset = TEPNPYDataset(
+    # 전체 데이터셋 생성
+    full_dataset = TEPNPYDataset(
         data_path=train_data,
         labels_path=train_labels,
         transform=CSVToTensor(),
-        is_test=False  # 50 윈도우 크기 사용
+        is_test=False
     )
     
-    # 데이터셋 정보 출력
-    logger.info("\n데이터셋 정보:")
-    first_data = train_dataset[0]
-    logger.info(f"입력 데이터 shape: {first_data['shot'].shape}")  # [50, 52]
-    logger.info(f"측정값(m) shape: {first_data['shot'][:, :11].shape}")  # [50, 11]
-    logger.info(f"라벨: {first_data['label']}")
+    # 정상 데이터만 필터링
+    normal_indices = [i for i, label in enumerate(full_dataset.labels) if label == 0]
+    normal_dataset = torch.utils.data.Subset(full_dataset, normal_indices)
     
-    # 전체 데이터셋 크기 출력
-    logger.info(f"\n전체 훈련 데이터셋 크기:")
-    logger.info(f"데이터셋 길이: {len(train_dataset)}")
-    logger.info(f"전체 데이터 shape: {train_dataset.data.shape if hasattr(train_dataset, 'data') else 'N/A'}")
-    logger.info(f"전체 라벨 shape: {train_dataset.labels.shape if hasattr(train_dataset, 'labels') else 'N/A'}")
+    # 고장 데이터만 필터링 (정상 제외)
+    fault_indices = [i for i, label in enumerate(full_dataset.labels) if label > 0]
+    fault_dataset = torch.utils.data.Subset(full_dataset, fault_indices)
+    
+    logger.info(f"\n데이터셋 정보:")
+    logger.info(f"전체 데이터셋 크기: {len(full_dataset)}")
+    logger.info(f"정상 데이터셋 크기: {len(normal_dataset)}")
+    logger.info(f"고장 데이터셋 크기: {len(fault_dataset)}")
     
     # 데이터 로더 생성
-    train_loader = DataLoader(
-        train_dataset,
+    fault_loader = DataLoader(
+        fault_dataset,
         batch_size=batch_size,
         shuffle=True,
         num_workers=0
     )
     
-    # 첫 번째 배치 shape 출력
-    first_batch = next(iter(train_loader))
+    # 첫 번째 배치 정보 출력
+    first_fault_batch = next(iter(fault_loader))
+    first_normal_data = normal_dataset[0]  # 첫 번째 정상 데이터
+    
     logger.info("\n첫 번째 배치 정보:")
-    logger.info(f"배치 전체 shape: {first_batch['shot'].shape}")  # [B, 50, 52]
-    logger.info(f"배치 측정값(m) shape: {first_batch['shot'][:, :, :11].shape}")  # [B, 50, 11]
-    logger.info(f"배치 라벨 shape: {first_batch['label'].shape}")  # [B,]
-    logger.info(f"라벨 고유값: {torch.unique(first_batch['label']).numpy()}")
+    logger.info(f"고장 배치 shape: {first_fault_batch['shot'].shape}")
+    logger.info(f"고장 라벨 shape: {first_fault_batch['label'].shape}")
+    logger.info(f"고장 라벨 고유값: {torch.unique(first_fault_batch['label']).numpy()}")
+    logger.info(f"정상 데이터 shape: {first_normal_data['shot'].shape}")
+    logger.info(f"정상 라벨: {first_normal_data['label']}")
     
     # 채널 리스트 파싱
     channels = [int(c) for c in channels.split(',')]
     
-    # 모델 생성 (조건부 모델)
+    # 모델 생성 (정상화 모델)
     model = ConditionalTCNAutoencoder(
         m_dim=11,  # 측정값만 사용
         fault_dim=13,  # fault 타입 수
@@ -138,7 +162,7 @@ def main(train_data, train_labels, cuda, batch_size, epochs, lr, channels, kerne
     best_train_loss = float('inf')
     for epoch in range(epochs):
         # 학습
-        train_loss = train_epoch(model, train_loader, optimizer, device)
+        train_loss = train_epoch(model, fault_loader, normal_dataset, optimizer, device)
         
         logger.info(f"Epoch {epoch+1}/{epochs}")
         logger.info(f"Train Loss: {train_loss:.6f}")
@@ -166,7 +190,7 @@ def main(train_data, train_labels, cuda, batch_size, epochs, lr, channels, kerne
             }, checkpoint_path)
             logger.info(f"체크포인트 저장됨: {checkpoint_path}")
     
-    logger.info("학습 완료!")
+    logger.info("정상화 모델 학습 완료!")
 
 
 if __name__ == '__main__':

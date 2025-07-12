@@ -36,11 +36,15 @@ class TCNBlock(nn.Module):
         return nn.functional.leaky_relu(out + res, 0.1)
 
 class ConditionalTCNAutoencoder(nn.Module):
+    """
+    정상화 TCN Autoencoder
+    모든 고장 데이터를 정상(0)으로 재구성하도록 학습
+    """
     def __init__(self, m_dim=11, fault_dim=13, channels=[32,64,64], kernel_size=3):
         super().__init__()
         self.fault_dim = fault_dim
         
-        # 라벨을 임베딩으로 변환하는 레이어
+        # 고장 라벨을 임베딩으로 변환하는 레이어
         self.fault_embedding = nn.Sequential(
             nn.Linear(1, 32),  # 단일 라벨값을 32차원으로
             nn.LeakyReLU(0.1),
@@ -82,14 +86,16 @@ class ConditionalTCNAutoencoder(nn.Module):
     def forward(self, m_seq, fault_labels, fault_time=None):
         """
         Args:
-            m_seq: (B, 50, 11) 조작변수 시퀀스
+            m_seq: (B, 50, 11) 조작변수 시퀀스 (고장 데이터 포함)
             fault_labels: (B,) fault 라벨 (0-12 범위의 정수)
             fault_time: (B,) fault 발생 시점 (옵션)
+        Returns:
+            정상화된 시퀀스 (B, 50, 11)
         """
         # m_seq: (B, 50, 11) → (B, 11, 50)
         x = m_seq.transpose(1, 2)
         
-        # 라벨을 시퀀스 길이로 확장 (train_model.py와 동일한 방식)
+        # 라벨을 시퀀스 길이로 확장
         fault_labels_seq = fault_labels.unsqueeze(1).expand(-1, m_seq.size(1))  # shape: (B, seq_len)
         
         # 각 시점의 라벨을 float로 변환하고 차원 추가
