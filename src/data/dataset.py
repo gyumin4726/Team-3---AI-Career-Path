@@ -491,18 +491,16 @@ class TEPNPYDataset(Dataset):
         self.transform = transform
         self.is_test = is_test
         
-        # 시뮬레이션당 윈도우 개수를 is_test에 따라 하드코딩
+        # 시뮬레이션당 윈도우 개수
         self.windows_per_simulation = 92 if is_test else 46
-        
         # 클래스 개수 계산
         self.class_count = len(np.unique(self.labels))
         self.features_count = self.data.shape[2]
 
-        # 시뮬레이션 수 계산 (테스트: 200, 훈련: 500)
-        sims_per_class = 200 if is_test else 500
-        total_sims = sims_per_class * self.class_count  # 13개 클래스
-
-        # 시뮬레이션 인덱스 배열 생성 (각 데이터 포인트의 시뮬레이션 번호)
+        # 시뮬레이션 런 개수(고장별) 자동 계산
+        # 전체 데이터 개수 / (클래스 개수 × 윈도우 개수)
+        sims_per_class = len(self.data) // (self.class_count * self.windows_per_simulation)
+        total_sims = sims_per_class * self.class_count
         self.sim_indices = np.repeat(np.arange(total_sims), self.windows_per_simulation)
 
         # 데이터셋 정보 출력
