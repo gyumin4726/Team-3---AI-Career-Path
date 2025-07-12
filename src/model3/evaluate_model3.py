@@ -12,7 +12,7 @@ from src.model3.model3 import TCNSeq2Seq
 
 @click.command()
 @click.option('--cuda', type=int, default=0)
-@click.option('--checkpoint_path', type=str, required=True, help='Model3 체크포인트 파일 경로')
+@click.option('--checkpoint_path', type=str, default='model_pretrained/model3/5_epoch_checkpoint.pth', help='Model3 체크포인트 파일 경로')
 @click.option('--test_data_path', type=str, default='data/test_X_model1.npy', help='테스트 데이터 경로')
 @click.option('--test_labels_path', type=str, default='data/test_Y_model1.npy', help='테스트 라벨 경로')
 @click.option('--output_dir', type=str, default='data/model3_results', help='결과 저장 디렉토리')

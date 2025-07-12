@@ -18,10 +18,9 @@ import random
 
 @click.command()
 @click.option('--cuda', type=int, default=0)
-@click.option('--run_tag', type=str, default="model3_training")
 @click.option('--random_seed', type=int, default=42)
 @click.option('--resume_from', type=str, default=None, help='체크포인트 파일 경로')
-def main(cuda, run_tag, random_seed, resume_from):
+def main(cuda, random_seed, resume_from):
     """
     Model3 (TCNSeq2Seq) 모델 훈련 - NPY 데이터 사용
     """
@@ -90,9 +89,6 @@ def main(cuda, run_tag, random_seed, resume_from):
 
     # 모델 저장 디렉토리 생성
     os.makedirs("model_pretrained/model3", exist_ok=True)  # 디렉토리 미리 생성
-    model_dir = f"model_pretrained/model3/{get_latest_model_id(dir_name='model_pretrained/model3') + 1}_{run_tag}"
-    os.makedirs(model_dir, exist_ok=True)
-    os.makedirs(f"{model_dir}/weights", exist_ok=True)
     
     for epoch in range(start_epoch, epochs):
         logger.info(f'Epoch {epoch}/{epochs} training...')
@@ -188,7 +184,7 @@ def main(cuda, run_tag, random_seed, resume_from):
                 'avg_mse': avg_mse,
                 'avg_mae': avg_mae,
             }
-            checkpoint_path = f"{model_dir}/weights/{epoch}_epoch_checkpoint.pth"
+            checkpoint_path = f"model_pretrained/model3/{epoch}_epoch_checkpoint.pth"
             torch.save(checkpoint, checkpoint_path)
             logger.info(f'Checkpoint saved: {checkpoint_path}')
 
