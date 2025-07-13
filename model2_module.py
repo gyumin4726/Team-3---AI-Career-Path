@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Any
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -19,6 +19,7 @@ class Model2Module:
         self.normal_db = torch.tensor(normal_db, dtype=torch.float32).to(DEVICE)  # (N_normal, T, D)
         self.T = normal_db.shape[1]
         self.D = normal_db.shape[2]
+        self.results = {}  # 내부 결과 저장용
 
     def compute_mse(self, a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
         """
@@ -96,8 +97,48 @@ class Model2Module:
         x_part = reconstructed_all[:, :, :41]  # (N, T, 41)
         m_part = reconstructed_all[:, :, 41:]  # (N, T, 11)
 
+        # 변화량 요약 저장
+        delta_summary = self.compute_delta_summary(
+            before=model1_output[:, fault_time:, :],
+            after=reconstructed_all[:, fault_time:, :]
+        )
+
+        self.results = {
+            'fault_time': fault_time,
+            'k_used': k,
+            'normalized': True,
+            'delta_summary': delta_summary
+        }
+
         return {
             'reconstructed_all': reconstructed_all,
             'X': x_part,
             'M': m_part
         }
+
+    def compute_delta_summary(self, before: np.ndarray, after: np.ndarray, topk: int = 3):
+        """
+        변수별 보정 전후 변화량 통계 요약
+        """
+        delta = np.abs(after - before).mean(axis=(0, 1))  # (D,)
+        topk_idx = np.argsort(delta)[-topk:][::-1].tolist()
+        return {
+            'topk_variables': topk_idx,
+            'mean_deltas': delta[topk_idx].tolist()
+        }
+
+    def get_results_for_llm(self) -> Dict[str, Any]:
+        """
+        LLM에 전달할 보정 결과 요약 (Model2 기준)
+        """
+        result = {
+            'fault_time': self.results.get('fault_time'),
+            'k_used': self.results.get('k_used'),
+            'normalized': self.results.get('normalized', False)
+        }
+
+        # optional: 변화량 큰 변수 요약 포함
+        if 'delta_summary' in self.results:
+            result['delta_summary'] = self.results['delta_summary']
+
+        return result
