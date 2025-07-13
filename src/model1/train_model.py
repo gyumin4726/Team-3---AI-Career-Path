@@ -59,26 +59,15 @@ def main(cuda, random_seed, resume_from, output_dir):
     logging.basicConfig(level=logging.INFO)
     latest_model_id = get_latest_model_id(dir_name=output_dir) + 1
     
-    temp_log_file = os.path.join(output_dir, 'log.txt')
-    file_handler = logging.FileHandler(temp_log_file)
-    file_handler.setFormatter(log_formatter)
     stream_handler = logging.StreamHandler(sys.stdout)
     stream_handler.setFormatter(log_formatter)
     logger = logging.getLogger(__name__)
-    logger.addHandler(file_handler)
     logger.addHandler(stream_handler)
     logger.propagate = False
 
     device = torch.device(f"cuda:{cuda}" if torch.cuda.is_available() else "cpu")
     logger.info(f'Training begin on {device}')
     logger.info(f'Model dir {output_dir}')
-
-    with open(__file__, 'r') as f:
-        with open(os.path.join(output_dir, "script.py"), 'w') as out:
-            print("# This file was saved automatically during the experiment run.\n", end='', file=out)
-            for line in f.readlines():
-                print(line, end='', file=out)
-
 
     logger.info(f"Random Seed: {random_seed}")
     random.seed(random_seed)
@@ -87,9 +76,9 @@ def main(cuda, random_seed, resume_from, output_dir):
     cudnn.benchmark = True
 
     lstm_size = 64
-    loader_jobs = 4
+    loader_jobs = 0
     window_size = 50
-    bs = 512
+    bs = 256
     
     # NPY 파일 경로 설정
     train_data_path = "data/train_X_model1.npy"
@@ -369,8 +358,6 @@ def main(cuda, random_seed, resume_from, output_dir):
             logger.info(f'체크포인트 저장됨: {checkpoint_path}')
 
     logger.info(f'Finished training for {epochs} epochs.')
-
-    file_handler.close()
 
 if __name__ == '__main__':
     main()
