@@ -11,8 +11,8 @@
 
 **4단계 공정 이상 분석 및 정상화 시스템**
 - Model1: Fault 시점 탐지 + Fault 종류 분류 (CNN1D2D Discriminator)
-- Model2: 조작 변수 정상화 (Conditional TCN-AE) - **추후 추가 예정**
-- Model3: 반응 변수 예측 (TCNSeq2Seq) - **추후 추가 예정**
+- Model2: 조작 변수 정상화 (KNN 기반)
+- Model3: 반응 변수 예측 (TCNSeq2Seq)
 - Model4: 정상 여부 재분류 (Model1 재사용)
 
 **주요 특징**
@@ -20,7 +20,7 @@
 - 21가지 결함 유형 분류 (정상상태 포함)
 - 슬라이딩 윈도우 기반 배치 처리 (50, 10)
 - 반복 정상화 파이프라인 (최대 3회)
-- LLM 기반 결과 해설 (추후 활성화 예정)
+- LLM 기반 결과 해설
 
 ## 프로젝트 구조
 
@@ -29,14 +29,16 @@ tennessee_eastman_diploma/
 ├── src/
 │   ├── main/              # 메인 파이프라인
 │   │   ├── pipeline.py    # TEP 전체 파이프라인
-│   │   └── model1_module.py  # Model1 모듈
+│   │   ├── model1_module.py  # Model1 모듈
+│   │   ├── model2_module.py  # Model2 모듈 (KNN 기반)
+│   │   └── model3_module.py  # Model3 모듈
 │   ├── model1/            # Model1 관련 코드
 │   │   ├── convolutional_models.py    # CNN1D2D 모델
 │   │   ├── evaluate_model.py          # 모델 평가
 │   │   └── train_model.py             # 모델 훈련
 │   ├── data/              # 데이터 처리 및 로딩
 │   │   └── dataset.py     # TEP 데이터셋 클래스들
-│   └── LLM/               # LLM 관련 코드 (추후 활성화)
+│   └── LLM/               # LLM 관련 코드
 ├── data/                  # 데이터셋 저장소
 │   ├── final_X.npy        # 전처리된 입력 데이터
 │   └── final_Y.npy        # 전처리된 라벨 데이터
@@ -77,18 +79,20 @@ tennessee_eastman_diploma/
 - Fault 종류 분류 (21가지)
 - 정상 상태 감지 시 파이프라인 조기 종료
 
-### 2단계: Model2 (조작 변수 정상화) - 추후 추가 예정
-- KNN?? 사용
-- 조작 변수만 추출하여 정상화
-- Fault 정보를 조건으로 사용
+### 2단계: Model2 (조작 변수 정상화)
+- **KNN 기반 보정** 사용
+- 고장 시점 이후 구간만 정상화
+- 정상 DB와 유사한 패턴으로 보정
+- 반응 변수 (41개)와 조작 변수 (11개) 분리
 
 ### 3단계: Model3 (반응 변수 예측)
-- TCNSeq2Seq 사용
+- **TCNSeq2Seq** 사용
 - 정상화된 조작 변수를 기반으로 반응 변수 예측
+- 시계열 예측 모델
 
 ### 4단계: Model4 (정상 여부 재분류)
 - **Model1 재사용**
-- 정상화된 데이터 (m' + x')를 입력으로 사용
+- 정상화된 데이터를 입력으로 사용
 - 정상 분류 시: 정상화 완료, 파이프라인 종료
 - 비정상 분류 시: Model2로 반복 (최대 3회)
 
@@ -147,36 +151,26 @@ python src/main/pipeline.py
 - **Multitask Learning**: 결함 분류 + 실제/가짜 판별
 - **배치 처리**: 슬라이딩 윈도우 기반
 
-### 슬라이딩 윈도우 변환
-```python
-# 슬라이딩 윈도우 시점 → 원본 시점 변환
-window_num = window_index // window_size
-timestep_in_window = window_index % window_size
-original_time = window_num * step_size + timestep_in_window
-```
+## Model2 상세 정보
 
-### 결과 출력
-- **파이프라인 모델들**: 슬라이딩 윈도우 인덱스 (0~4599)
-- **LLM**: 원본 시점 (0~959)
+### KNN 기반 보정
+- **정상 DB 활용**: 유사한 패턴의 정상 데이터로 보정
+- **고장 시점 이후만 보정**: 고장 이전 데이터는 유지
+- **거리 기반 선택**: MSE 거리로 가장 유사한 k개 선택
+- **평균화 보정**: 선택된 k개 시퀀스의 평균으로 보정
 
-## 향후 개발 계획
+### 보정 방법
+- **mean**: k개 시퀀스의 평균 사용
+- **first**: 가장 유사한 1개 시퀀스 사용
 
-### Model2 (조작 변수 정상화)
-- Conditional TCN-AE 구현
-- 조작 변수 (11개) 추출 및 정상화
-- Fault 정보를 조건으로 사용
+## Model3 상세 정보
 
-### Model3 (반응 변수 예측)
-- TCNSeq2Seq (Temporal Convolutional Network Sequence-to-Sequence) 구현
-- 정상화된 조작 변수 기반 반응 변수 예측
-- 시계열 예측 모델
+### TCNSeq2Seq 구조
+- **Temporal Convolutional Network**: 시계열 패턴 학습
+- **Sequence-to-Sequence**: 입력 시퀀스를 출력 시퀀스로 변환
+- **조작 변수 기반**: 정상화된 조작 변수로 반응 변수 예측
 
-### LLM 통합
-- Gemini API 연동
-- 결과 해설 및 분석
-- 사용자 친화적 출력
-
-### 파이프라인 실행 (미완)
+## 파이프라인 실행 예시
 
 ```bash
 # 전체 파이프라인 테스트
