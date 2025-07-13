@@ -169,19 +169,6 @@ class Model1Module:
                 'fault_time': self.results['fault_time'],
                 'original_fault_time': self.results['original_fault_time']
             }
-
-    def classify_normalized_data(self, normalized_data: np.ndarray) -> Dict[str, Any]:
-        """
-        정상화된 데이터를 입력받아 정상/비정상 판단 및 결과 반환 (Model4 역할)
-        Returns:
-            {
-                'is_normal': bool,
-                'fault_class': str or None,
-                'fault_time': int or None,
-                'original_fault_time': int or None
-            }
-        """
-        return self.detect_fault(normalized_data)
     
     def get_results_for_model2(self) -> Dict[str, Any]:
         """
