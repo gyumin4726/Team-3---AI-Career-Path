@@ -165,18 +165,103 @@ class Model2Module:
             'mean_deltas': delta[topk_idx].tolist()
         }
 
-    def get_results_for_llm(self) -> Dict[str, Any]:
+    def summarize_top3_m_changes(self, normalized_sequence: np.ndarray, original_sequence: np.ndarray, fault_time: int):
         """
-        LLM에 전달할 보정 결과 요약 (Model2 기준)
+        Model2 정상화 전후로 변화가 큰 조작 변수 Top 3와 통계 요약 반환
+        Args:
+            normalized_sequence: (B, 50, 52) - Model2 정상화 결과
+            original_sequence: (B, 50, 52) - 원본 입력 데이터
+            fault_time: 슬라이딩 윈도우 인덱스 기준 fault 시점
+        Returns:
+            {
+                'top3_indices': [int, int, int],
+                'stats': {
+                    idx: {
+                        'before_mean': float,
+                        'after_mean': float,
+                        'delta_mean': float,
+                        'before_std': float,
+                        'after_std': float,
+                        'delta_max': float,
+                        'delta_min': float
+                    }, ...
+                }
+            }
         """
-        result = {
-            'fault_time': self.results.get('fault_time'),
-            'k_used': self.results.get('k_used'),
-            'normalized': self.results.get('normalized', False)
+        # 조작 변수(M)만 추출 (41~51)
+        norm_m = normalized_sequence[:, :, 41:]
+        orig_m = original_sequence[:, :, 41:]
+
+        # fault_time 이후 구간만 추출 (B, 50, 11) → (N, 11)
+        B, T, M = norm_m.shape
+        total_steps = B * T
+        norm_m_flat = norm_m.reshape(total_steps, M)
+        orig_m_flat = orig_m.reshape(total_steps, M)
+
+        # fault_time 이후만
+        norm_m_after = norm_m_flat[fault_time:]
+        orig_m_after = orig_m_flat[fault_time:]
+
+        # 변수별 변화량 (정상화 - 원본)의 절대값 평균
+        delta = np.abs(norm_m_after - orig_m_after)
+        delta_mean = delta.mean(axis=0)  # (11,)
+
+        # 변화량 큰 변수 Top 3 인덱스 (조작 변수 인덱스는 41~51이므로 +41)
+        top3_indices = np.argsort(delta_mean)[-3:][::-1].tolist()
+        top3_indices = [idx + 41 for idx in top3_indices]  # 실제 변수 인덱스로 변환
+
+        stats = {}
+        for i, idx in enumerate(top3_indices):
+            m_idx = idx - 41  # 조작 변수 내 인덱스
+            before = orig_m_flat[:fault_time, m_idx]
+            after_norm = norm_m_flat[fault_time:, m_idx]
+            after_orig = orig_m_flat[fault_time:, m_idx]
+            stats[idx] = {
+                'before_mean': float(np.mean(before)) if before.size > 0 else None,
+                'after_mean': float(np.mean(after_norm)) if after_norm.size > 0 else None,
+                'delta_mean': float(np.mean(np.abs(after_norm - after_orig))) if after_norm.size > 0 else None,
+                'before_std': float(np.std(before)) if before.size > 0 else None,
+                'after_std': float(np.std(after_norm)) if after_norm.size > 0 else None,
+                'delta_max': float(np.max(np.abs(after_norm - after_orig))) if after_norm.size > 0 else None,
+                'delta_min': float(np.min(np.abs(after_norm - after_orig))) if after_norm.size > 0 else None
+            }
+        return {
+            'top3_indices': top3_indices,
+            'stats': stats
         }
 
-        # optional: 변화량 큰 변수 요약 포함
-        if 'delta_summary' in self.results:
-            result['delta_summary'] = self.results['delta_summary']
+    def get_results_for_llm(self, original_sequence: np.ndarray, fault_time: int) -> dict:
+        """
+        LLM에게 전달할 Model2 요약 결과 반환
+        Args:
+            original_sequence: (B, 50, 52) - 원본 입력 데이터
+            fault_time: 슬라이딩 윈도우 인덱스 기준 fault 시점
+        Returns:
+            {
+                'top3_indices': [...],
+                'top3_stats': {...},
+                'summary': str
+            }
+        """
+        # 정상화된 데이터는 self.results에서 가져오기
+        normalized_sequence = self.results.get('normalized_sequence', original_sequence)
+        summary_data = self.summarize_top3_m_changes(normalized_sequence, original_sequence, fault_time)
+        top3_indices = summary_data['top3_indices']
+        stats = summary_data['stats']
 
-        return result
+        # 간단한 요약 설명 생성
+        summary_lines = [
+            f"fault_time={fault_time} 이후 정상화된 조작 변수(M)의 변화가 큰 Top 3 변수는 {top3_indices}입니다.",
+        ]
+        for idx in top3_indices:
+            s = stats[idx]
+            summary_lines.append(
+                f"  - 변수 {idx}: fault 이전 평균={s['before_mean']:.3f}, fault 이후 정상화 평균={s['after_mean']:.3f}, 변화량 평균={s['delta_mean']:.3f}, 변화량 최대={s['delta_max']:.3f}"
+            )
+        summary = '\n'.join(summary_lines)
+
+        return {
+            'top3_indices': top3_indices,
+            'top3_stats': stats,
+            'summary': summary
+        }

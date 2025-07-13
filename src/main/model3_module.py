@@ -244,15 +244,6 @@ class Model3Module:
             'predicted_sequence': self.results['predicted_sequence']
         }
     
-    def is_loaded(self) -> bool:
-        """
-        Model3이 로드되었는지 확인
-        
-        Returns:
-            로드되었으면 True, 아니면 False
-        """
-        return self.model3 is not None 
-
     def get_results_for_llm(self, original_sequence: np.ndarray, fault_time: int) -> dict:
         """
         LLM에게 전달할 Model3 요약 결과 반환
@@ -261,7 +252,6 @@ class Model3Module:
             fault_time: 슬라이딩 윈도우 인덱스 기준 fault 시점
         Returns:
             {
-                'fault_time': fault_time,
                 'top3_indices': [...],
                 'top3_stats': {...},
                 'summary': str
@@ -284,7 +274,6 @@ class Model3Module:
         summary = '\n'.join(summary_lines)
 
         return {
-            'fault_time': fault_time,
             'top3_indices': top3_indices,
             'top3_stats': stats,
             'summary': summary
