@@ -110,25 +110,27 @@ class Model1Module:
             fault_predictions = []
             detailed_predictions = []
             print(f"배치 크기: {batch_size}")
+            # evaluate_model.py와 동일한 방식으로 시점별 예측 수집
+            all_predictions = []  # 모든 시점의 예측값 저장
+            
             for batch_idx in range(batch_size):
                 batch_data = torch.FloatTensor(data_sequence[batch_idx]).unsqueeze(0).to(self.device)  # (1, 50, 52)
                 with torch.no_grad():
                     type_logits, _ = self.model1(batch_data, None)
                     type_logits = type_logits.transpose(1, 2)
-                    batch_predictions = torch.argmax(type_logits, dim=1).cpu().numpy()  # shape: (1, 50)
-                    flat_preds = batch_predictions.flatten().tolist()  # ✅ (50,) → list[int]
-                    detailed_predictions.extend(flat_preds)
-                    batch_majority = Counter(flat_preds).most_common(1)[0][0]
-
-                    fault_predictions.append(batch_majority)
-            print(f"총 {len(fault_predictions)}개 배치 분석 완료")
-            print(f"상세 예측: {len(detailed_predictions)}개 시점 분석 완료")
-            prediction_counts = Counter(fault_predictions)
-            print(f"배치별 예측 분포: {dict(prediction_counts)}")
+                    batch_predictions = torch.argmax(type_logits, dim=1).cpu().numpy()  # (1, 50)
+                    
+                    # 각 시점의 예측값을 개별적으로 저장 (evaluate_model.py 방식)
+                    for pred in batch_predictions[0]:  # (50,) → 50개 시점
+                        all_predictions.append(int(pred))
+            
+            print(f"총 {len(all_predictions)}개 시점 분석 완료")
+            prediction_counts = Counter(all_predictions)
+            print(f"시점별 예측 분포: {dict(prediction_counts)}")
             most_common_fault = prediction_counts.most_common(1)[0][0]
             fault_class = f"fault_{most_common_fault}" if most_common_fault != 0 else "normal"
             detailed_fault_time, _, correct_preds = detect_fault_onset(
-                detailed_predictions, 
+                all_predictions, 
                 most_common_fault, 
                 threshold=5
             )
