@@ -115,9 +115,11 @@ class Model1Module:
                 with torch.no_grad():
                     type_logits, _ = self.model1(batch_data, None)
                     type_logits = type_logits.transpose(1, 2)
-                    batch_predictions = torch.argmax(type_logits, dim=1).cpu().numpy()  # (50,)
-                    detailed_predictions.extend(batch_predictions)
-                    batch_majority = Counter(batch_predictions).most_common(1)[0][0]
+                    batch_predictions = torch.argmax(type_logits, dim=1).cpu().numpy()  # shape: (1, 50)
+                    flat_preds = batch_predictions.flatten().tolist()  # ✅ (50,) → list[int]
+                    detailed_predictions.extend(flat_preds)
+                    batch_majority = Counter(flat_preds).most_common(1)[0][0]
+
                     fault_predictions.append(batch_majority)
             print(f"총 {len(fault_predictions)}개 배치 분석 완료")
             print(f"상세 예측: {len(detailed_predictions)}개 시점 분석 완료")
@@ -159,7 +161,7 @@ class Model1Module:
         if is_normal:
             return {
                 'is_normal': True,
-                'fault_class': None,
+                'fault_class': "normal",  # None 대신 "normal" 반환
                 'fault_time': None,
                 'original_fault_time': None
             }

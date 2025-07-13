@@ -59,7 +59,9 @@ class TEPPipeline:
         print(f"입력 데이터 형태: {data_sequence.shape}")
         
         # 1단계: Fault 시점 탐지 + Fault 종류 분류 (Model1)
-        fault_time, fault_class = self.model1_module.detect_fault(data_sequence)
+        model1_results = self.model1_module.detect_fault(data_sequence)
+        fault_time = model1_results.get('fault_time')
+        fault_class = model1_results.get('fault_class')
         
         # Model1 결과에 따른 분기 처리
         if self.model1_module.is_normal():
@@ -118,9 +120,12 @@ class TEPPipeline:
             print(f"정상화된 데이터 결합 완료: {normalized_data.shape}")
             
             # 4단계: 정상 여부 재분류 (Model4 = Model1 재사용)
-            fault_time, final_class = self.model1_module.detect_fault(normalized_data)
+            model4_results = self.model1_module.detect_fault(normalized_data)
+            fault_time = model4_results.get('fault_time')
+            final_class = model4_results.get('fault_class')
             
             # Model4 결과에 따른 분기 처리
+            print(f"DEBUG: final_class = '{final_class}', type = {type(final_class)}")
             if final_class == "normal":
                 print(f"반복 {current_iteration}: 정상화 완료!")
                 
@@ -268,13 +273,15 @@ def main():
         
         # 랜덤 데이터 생성 (fallback)
         np.random.seed(42)
-        batch_size = 4
-        m_sequence = np.random.randn(batch_size, 50, 11)  # (4, 50, 11) - 조작 변수
-        x_sequence = np.random.randn(batch_size, 50, 41)  # (4, 50, 41) - 반응 변수
+        batch_size = 92
+        batch_data_array = np.random.randn(batch_size, 50, 52)  # (92, 50, 52) - 전체 시퀀스
         
         print(f"랜덤 테스트 데이터 생성:")
-        print(f"  - m_sequence: {m_sequence.shape}")
-        print(f"  - x_sequence: {x_sequence.shape}")
+        print(f"  - batch_data_array: {batch_data_array.shape}")
+        
+        # 파이프라인 실행 (랜덤 데이터 전달)
+        pipeline = TEPPipeline()
+        results = pipeline.run_full_pipeline(batch_data_array)
     
     # LLM으로 결과 설명
     print("\n" + "="*60)
