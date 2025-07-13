@@ -32,7 +32,7 @@ class TEPPipeline:
     4. Model4: 정상 여부 재분류 (Model1 재사용)
     """
     
-    def __init__(self, normal_db: np.ndarray = None, data_path: str = None):
+    def __init__(self, normal_db: np.ndarray = None, data_path: str = 'data/train_X_model1.npy'):
         """
         파이프라인 초기화
         

@@ -177,8 +177,9 @@ class Model2Module:
         
         # 변화량 요약 저장 (조작 변수만)
         delta_summary = self.compute_delta_summary(
-            before=model1_output[:, fault_time:, 41:],  # 조작 변수만
-            after=combined_data.detach().cpu().numpy()[:, fault_time:, 41:]  # 조작 변수만
+            before=model1_output[:, :, 41:],  # 조작 변수만 (전체)
+            after=combined_data.detach().cpu().numpy()[:, :, 41:],  # 조작 변수만 (전체)
+            fault_time=fault_time
         )
 
         self.results = {
@@ -201,16 +202,50 @@ class Model2Module:
             'M': m_part_np
         }
 
-    def compute_delta_summary(self, before: np.ndarray, after: np.ndarray, topk: int = 3):
+    def compute_delta_summary(self, before: np.ndarray, after: np.ndarray, fault_time: int, topk: int = 3):
         """
-        변수별 보정 전후 변화량 통계 요약
+        변수별 보정 전후 변화량 통계 요약 (배치 단위 처리와 동일한 방식)
         """
-        delta = np.abs(after - before).mean(axis=(0, 1))  # (D,)
-        topk_idx = np.argsort(delta)[-topk:][::-1].tolist()
-        return {
-            'topk_variables': topk_idx,
-            'mean_deltas': delta[topk_idx].tolist()
-        }
+        if before.size == 0 or after.size == 0:
+            return {
+                'topk_variables': [],
+                'mean_deltas': []
+            }
+        
+        # fault_time을 배치 인덱스로 변환 (normalize_after_fault와 동일)
+        batch_idx = fault_time // 50  # 어느 배치에 속하는지
+        timestep_in_batch = fault_time % 50  # 배치 내 시점
+        
+        # 배치 단위로 처리 (normalize_after_fault와 동일한 로직)
+        B, T, M = before.shape  # (배치수, 시계열길이, 변수수)
+        
+        if batch_idx < B:  # 배치 범위 내
+            # 배치 batch_idx+1부터 끝까지 (고장 이후 구간)
+            if batch_idx + 1 < B:
+                before_post_fault = before[batch_idx+1:, :, :]  # 이후 배치들
+                after_post_fault = after[batch_idx+1:, :, :]    # 이후 배치들
+            else:
+                # 현재 배치가 마지막인 경우 빈 배열
+                before_post_fault = np.empty((0, T, M))
+                after_post_fault = np.empty((0, T, M))
+        else:
+            # fault_time이 범위를 벗어난 경우 빈 배열
+            before_post_fault = np.empty((0, T, M))
+            after_post_fault = np.empty((0, T, M))
+        
+        # 변화량 계산 (고장 이후 구간만)
+        if before_post_fault.size > 0 and after_post_fault.size > 0:
+            delta = np.abs(after_post_fault - before_post_fault).mean(axis=(0, 1))  # (M,)
+            topk_idx = np.argsort(delta)[-topk:][::-1].tolist()
+            return {
+                'topk_variables': topk_idx,
+                'mean_deltas': delta[topk_idx].tolist()
+            }
+        else:
+            return {
+                'topk_variables': [],
+                'mean_deltas': []
+            }
 
     def summarize_top3_m_changes(self, normalized_sequence: np.ndarray, original_sequence: np.ndarray, fault_time: int):
         """
