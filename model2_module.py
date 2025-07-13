@@ -32,20 +32,21 @@ class Model2Module:
         """
         return torch.mean((a - b) ** 2, dim=(1, 2))  # (N,)
 
-    def normalize_by_knn(self, fault_seq: torch.Tensor, k: int = 3, method: str = 'mean') -> torch.Tensor:
+    def normalize_by_knn(self, fault_seq: torch.Tensor, normal_db_part: torch.Tensor, k: int = 3, method: str = 'mean'):
         """
         단일 시퀀스에 대해 KNN 기반 보정 수행
         Args:
-            fault_seq: (T, D) - 고장 이후 구간
+            fault_seq: (T_part, D)
+            normal_db_part: (N_normal, T_part, D)  # 정상 DB 고장 이후 부분
         Returns:
-            normalized_seq: (T, D)
+            normalized_seq: (T_part, D)
         """
-        distances = self.compute_mse(self.normal_db, fault_seq)  # (N_normal,)
+        distances = self.compute_mse(normal_db_part, fault_seq)  # (N_normal,)
         topk_idx = torch.topk(distances, k=k, largest=False).indices  # (k,)
-        topk_seqs = self.normal_db[topk_idx]  # (k, T, D)
+        topk_seqs = normal_db_part[topk_idx]  # (k, T_part, D)
 
         if method == 'mean':
-            corrected = torch.mean(topk_seqs, dim=0)  # (T, D)
+            corrected = torch.mean(topk_seqs, dim=0)  # (T_part, D)
         elif method == 'first':
             corrected = topk_seqs[0]
         else:
@@ -88,8 +89,13 @@ class Model2Module:
             if fault_time is None or fault_time >= T:
                 continue
             # 고장 이후 부분만 보정
-            post_fault = input_tensor[i, fault_time:, :]
-            corrected = self.normalize_by_knn(post_fault, k=k, method=method)  # (T-fault_time, D)
+            post_fault = input_tensor[i, fault_time:, :]  # (T-fault_time, D)
+
+            # 정상 DB도 고장 이후 시점만 사용해 길이 맞추기
+            normal_db_post_fault = self.normal_db[:, fault_time:, :]  # (N_normal, T-fault_time, D)  # (N_normal, T-fault_time, D)
+
+            # KNN 보정 함수에 정상 DB 부분도 넘기도록 수정 필요
+            corrected = self.normalize_by_knn(post_fault, normal_db_post_fault, k=k, method=method)  # (T-fault_time, D)
             output_tensor[i, fault_time:, :] = corrected
 
         # X/M 분할 (반응 변수: 0~40, 조작 변수: 41~51)
