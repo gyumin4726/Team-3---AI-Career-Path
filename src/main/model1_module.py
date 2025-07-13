@@ -82,7 +82,6 @@ class Model1Module:
             data_sequence: 전체 데이터 시퀀스 (B, 50, 52)
         Returns:
             {
-                'is_normal': bool,
                 'fault_class': str or None,
                 'fault_time': int or None,  # 슬라이딩 윈도우 인덱스
                 'original_fault_time': int or None  # 원본 시점
@@ -97,7 +96,6 @@ class Model1Module:
             self.results['fault_class'] = "fault_1"
             self.results['original_fault_time'] = self.convert_window_index_to_original_time(300)
             return {
-                'is_normal': False,
                 'fault_class': self.results['fault_class'],
                 'fault_time': self.results['fault_time'],
                 'original_fault_time': self.results['original_fault_time']
@@ -154,22 +152,19 @@ class Model1Module:
             self.results['fault_class'] = "fault_1"
             self.results['original_fault_time'] = self.convert_window_index_to_original_time(300)
             return {
-                'is_normal': False,
                 'fault_class': self.results['fault_class'],
                 'fault_time': self.results['fault_time'],
                 'original_fault_time': self.results['original_fault_time']
             }
-        is_normal = (fault_class == "정상")
-        if is_normal:
+        
+        if fault_class == "정상":
             return {
-                'is_normal': True,
-                'fault_class': "정상",  # None 대신 "normal" 반환
+                'fault_class': "정상",
                 'fault_time': None,
                 'original_fault_time': None
             }
         else:
             return {
-                'is_normal': False,
                 'fault_class': fault_class,
                 'fault_time': self.results['fault_time'],
                 'original_fault_time': self.results['original_fault_time']
@@ -216,13 +211,4 @@ class Model1Module:
         return {
             'fault_time': self.results['original_fault_time'],  # 원본 시점 (0~959)
             'fault_class': self.results['fault_class']
-        }
-    
-    def is_normal(self) -> bool:
-        """
-        정상 상태인지 확인합니다.
-        
-        Returns:
-            정상이면 True, 비정상이면 False
-        """
-        return self.results['fault_class'] == "정상" 
+        } 

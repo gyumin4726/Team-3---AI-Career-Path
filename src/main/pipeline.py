@@ -77,7 +77,7 @@ class TEPPipeline:
         fault_class = model1_results.get('fault_class')
         
         # Model1 결과에 따른 분기 처리
-        if self.model1_module.is_normal():
+        if fault_class == "정상":
             print("정상 상태 감지 - 파이프라인 종료")
             
             # LLM에게 Model1 결과 전달
@@ -110,16 +110,16 @@ class TEPPipeline:
             current_iteration += 1
             print(f"비정상 상태 감지: {fault_class} - 반복 {current_iteration}/{max_iterations}")
             
-            # Model2용 결과 가져오기 (슬라이딩 윈도우 인덱스)
-            model2_results = self.model1_module.get_results_for_model2()
-            fault_time_for_model2 = model2_results['fault_time']  # 0~4599 범위
+            # Model1 결과를 Model2용으로 변환 (슬라이딩 윈도우 인덱스)
+            model1_result = self.model1_module.get_results_for_model2()
+            fault_time = model1_result['fault_time']  # 0~4599 범위
             
             # 2단계: 조작 변수 정상화 (Model2)
             if self.model2_module is not None:
                 print("Model2: 조작 변수 정상화 시작...")
                 model2_results = self.model2_module.normalize_after_fault(
                     model1_output=data_sequence,
-                    fault_time=fault_time_for_model2,
+                    fault_time=fault_time,
                     k=3,
                     method='mean'
                 )
@@ -135,7 +135,7 @@ class TEPPipeline:
                 normalized_data = data_sequence  # 전체 52차원 데이터
             
             # 3단계: 반응 변수 예측 (Model3에 52차원 데이터 전달)
-            predicted_data = self.model3_module.predict_new_sequence(normalized_data, fault_time_for_model2)
+            predicted_data = self.model3_module.predict_new_sequence(normalized_data, fault_time)
             
             print(f"Model3 완료: 예측된 데이터 형태 {predicted_data.shape}")
             
@@ -155,7 +155,7 @@ class TEPPipeline:
                     f"Model1 결과를 설명해주세요: {model1_results}"
                 )
                 
-                model3_results = self.get_model3_results_for_llm(data_sequence, fault_time_for_model2)
+                model3_results = self.get_model3_results_for_llm(data_sequence, fault_time)
                 model3_explanation = self.llm.generate_response(
                     f"Model3 결과를 설명해주세요: {model3_results}"
                 )
@@ -192,7 +192,7 @@ class TEPPipeline:
             f"Model1 결과를 설명해주세요: {model1_results}"
         )
         
-        model3_results = self.get_model3_results_for_llm(data_sequence, fault_time_for_model2)
+        model3_results = self.get_model3_results_for_llm(data_sequence, fault_time)
         model3_explanation = self.llm.generate_response(
             f"Model3 결과를 설명해주세요: {model3_results}"
         )
