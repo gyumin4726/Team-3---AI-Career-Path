@@ -150,6 +150,15 @@ class TEPPipeline:
         """
         return self.model1_module.get_results_for_llm()
     
+    def get_model3_results(self) -> Dict[str, Any]:
+        """
+        Model3의 결과를 반환합니다.
+        
+        Returns:
+            Model3 결과 딕셔너리
+        """
+        return self.model3_module.get_results()
+    
     def step2_normalize_manipulated_variables(self, m_sequence: np.ndarray, fault_class: str, fault_time: int) -> np.ndarray:
         """
         2단계: 조작 변수 정상화 (Model2: Conditional TCN-AE)
@@ -174,12 +183,13 @@ class TEPPipeline:
         print(f"결과: 정상화된 m' 시퀀스 형태={self.normalized_m.shape}")
         return self.normalized_m
     
-    def step3_predict_response_variables(self, x_sequence: np.ndarray, fault_class: str, fault_time: int) -> np.ndarray:
+    def step3_predict_response_variables(self, x_sequence: np.ndarray, m_sequence: np.ndarray, fault_class: str, fault_time: int) -> np.ndarray:
         """
         3단계: 반응 변수 예측 (Model3: RSSM)
         
         Args:
-            x_sequence: 전체 x 시퀀스
+            x_sequence: 반응 변수 시퀀스 (B, 50, 41)
+            m_sequence: 조작 변수 시퀀스 (B, 50, 11)
             fault_class: Model1에서 감지된 fault 종류
             fault_time: Model1에서 감지된 fault 시점 (0~4599 범위의 슬라이딩 윈도우 인덱스)
             
@@ -188,12 +198,13 @@ class TEPPipeline:
         """
         print("3단계: 반응 변수 예측")
         print(f"입력: x 시퀀스 형태={x_sequence.shape}")
-        print(f"정상화된 m' 시퀀스 형태={self.normalized_m.shape}")
+        print(f"입력: m 시퀀스 형태={m_sequence.shape}")
         print(f"Fault 시점: {fault_time} (슬라이딩 윈도우 인덱스 0~4599)")
         
-        # TODO: Model3 구현 (RSSM)
-        # 현재는 임시 결과
-        self.predicted_x = x_sequence.copy()  # 임시로 원본 복사
+        # Model3 모듈을 사용하여 반응 변수 예측
+        self.predicted_x = self.model3_module.predict_response_variables(
+            x_sequence, m_sequence, fault_class, fault_time
+        )
         
         print(f"결과: 예측된 x' 시퀀스 형태={self.predicted_x.shape}")
         return self.predicted_x
@@ -279,6 +290,7 @@ def main():
     print("LLM 결과 해설:")
     print("LLM 설명 기능은 현재 비활성화되어 있습니다.")
     print("Model1 결과:", pipeline.get_model1_results_for_llm())
+    print("Model3 결과:", pipeline.get_model3_results())
 
 if __name__ == "__main__":
     main() 
