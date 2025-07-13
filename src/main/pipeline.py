@@ -32,7 +32,7 @@ class TEPPipeline:
     4. Model4: 정상 여부 재분류 (Model1 재사용)
     """
     
-    def __init__(self, normal_db: np.ndarray = None, data_path: str = 'data/train_X_model1.npy'):
+    def __init__(self, normal_db: np.ndarray = None, data_path: str = 'data/train_fault_0_X.npy'):
         """
         파이프라인 초기화
         
@@ -122,8 +122,8 @@ class TEPPipeline:
                 model2_results = self.model2_module.normalize_after_fault(
                     model1_output=data_sequence,
                     fault_time=fault_time,
-                    k=3,
-                    method='mean',
+                    k=1,
+                    method='first',
                     data_path=self.data_path
                 )
                 normalized_m = model2_results['M']  # 조작 변수 (11개)
@@ -152,10 +152,15 @@ class TEPPipeline:
             if final_class == "정상":
                 print(f"반복 {current_iteration}: 정상화 완료!")
                 
-                # LLM에게 Model1과 Model3 결과 전달
+                # LLM에게 Model1, Model2, Model3 결과 전달
                 model1_results = self.get_model1_results_for_llm()
                 model1_explanation = self.llm.generate_response(
                     f"Model1 결과를 설명해주세요: {model1_results}"
+                )
+                
+                model2_results = self.get_model2_results_for_llm(data_sequence, fault_time)
+                model2_explanation = self.llm.generate_response(
+                    f"Model2 결과를 설명해주세요: {model2_results}"
                 )
                 
                 model3_results = self.get_model3_results_for_llm(data_sequence, fault_time)
@@ -174,6 +179,7 @@ class TEPPipeline:
                     'iterations': current_iteration,
                     'llm_explanations': {
                         'model1': model1_explanation,
+                        'model2': model2_explanation,
                         'model3': model3_explanation
                     }
                 }
@@ -189,10 +195,15 @@ class TEPPipeline:
         # 최대 반복 횟수 초과
         print(f"최대 반복 횟수({max_iterations}) 초과 - 정상화 실패")
         
-        # LLM에게 Model1과 Model3 결과 전달
+        # LLM에게 Model1, Model2, Model3 결과 전달
         model1_results = self.get_model1_results_for_llm()
         model1_explanation = self.llm.generate_response(
             f"Model1 결과를 설명해주세요: {model1_results}"
+        )
+        
+        model2_results = self.get_model2_results_for_llm(data_sequence, fault_time)
+        model2_explanation = self.llm.generate_response(
+            f"Model2 결과를 설명해주세요: {model2_results}"
         )
         
         model3_results = self.get_model3_results_for_llm(data_sequence, fault_time)
@@ -211,6 +222,7 @@ class TEPPipeline:
             'iterations': max_iterations,
             'llm_explanations': {
                 'model1': model1_explanation,
+                'model2': model2_explanation,
                 'model3': model3_explanation
             }
         }
@@ -237,6 +249,19 @@ class TEPPipeline:
         """
         return self.model3_module.get_results()
 
+    def get_model2_results_for_llm(self, original_sequence: np.ndarray, fault_time: int) -> Dict[str, Any]:
+        """
+        Model2의 결과를 LLM에게 전달하기 위한 형태로 반환합니다.
+        
+        Args:
+            original_sequence: (B, 50, 52) - 원본 입력 데이터
+            fault_time: 슬라이딩 윈도우 인덱스 기준 fault 시점
+            
+        Returns:
+            Model2 LLM용 결과 딕셔너리
+        """
+        return self.model2_module.get_results_for_llm(original_sequence, fault_time)
+
     def get_model3_results_for_llm(self, original_sequence: np.ndarray, fault_time: int) -> Dict[str, Any]:
         """
         Model3의 결과를 LLM에게 전달하기 위한 형태로 반환합니다.
@@ -261,8 +286,8 @@ def main():
         
         # 테스트 데이터셋 생성
         test_dataset = TEPNPYDataset(
-            data_path='data/final_X.npy',
-            labels_path='data/final_Y.npy',
+            data_path='data/test.npy',
+            labels_path='data/test_y.npy',
             transform=transform,
             is_test=True
         )
@@ -311,6 +336,8 @@ def main():
     print("LLM 결과 해설:")
     if 'llm_explanations' in results:
         print("Model1 설명:", results['llm_explanations'].get('model1', 'N/A'))
+        if 'model2' in results['llm_explanations']:
+            print("Model2 설명:", results['llm_explanations']['model2'])
         if 'model3' in results['llm_explanations']:
             print("Model3 설명:", results['llm_explanations']['model3'])
     else:
