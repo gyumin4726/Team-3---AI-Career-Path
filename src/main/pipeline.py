@@ -27,7 +27,7 @@ class TEPPipeline:
     4단계 파이프라인:
     1. Model1: Fault 시점 탐지 + Fault 종류 분류
     2. Model2: 조작 변수 정상화 (Conditional TCN-AE)
-    3. Model3: 반응 변수 예측 (RSSM)
+    3. Model3: 반응 변수 예측 (TCNSeq2Seq)
     4. Model4: 정상 여부 재분류 (Model1 재사용)
     """
     

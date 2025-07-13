@@ -12,7 +12,7 @@
 **4단계 공정 이상 분석 및 정상화 시스템**
 - Model1: Fault 시점 탐지 + Fault 종류 분류 (CNN1D2D Discriminator)
 - Model2: 조작 변수 정상화 (Conditional TCN-AE) - **추후 추가 예정**
-- Model3: 반응 변수 예측 (RSSM) - **추후 추가 예정**
+- Model3: 반응 변수 예측 (TCNSeq2Seq) - **추후 추가 예정**
 - Model4: 정상 여부 재분류 (Model1 재사용)
 
 **주요 특징**
@@ -82,10 +82,9 @@ tennessee_eastman_diploma/
 - 조작 변수만 추출하여 정상화
 - Fault 정보를 조건으로 사용
 
-### 3단계: Model3 (반응 변수 예측) - 추후 추가 예정
-- ?? 사용
+### 3단계: Model3 (반응 변수 예측)
+- TCNSeq2Seq 사용
 - 정상화된 조작 변수를 기반으로 반응 변수 예측
-- Fault 정보를 조건으로 사용
 
 ### 4단계: Model4 (정상 여부 재분류)
 - **Model1 재사용**
@@ -168,7 +167,7 @@ original_time = window_num * step_size + timestep_in_window
 - Fault 정보를 조건으로 사용
 
 ### Model3 (반응 변수 예측)
-- RSSM (Recurrent State Space Model) 구현
+- TCNSeq2Seq (Temporal Convolutional Network Sequence-to-Sequence) 구현
 - 정상화된 조작 변수 기반 반응 변수 예측
 - 시계열 예측 모델
 
