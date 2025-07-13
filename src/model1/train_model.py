@@ -30,19 +30,18 @@ REAL_LABEL = 1
 FAKE_LABEL = 0
 
 @click.command()
-@click.option('--cuda', required=True, type=int, default=7)
-@click.option('--run_tag', required=True, type=str, default="unknown")
+@click.option('--cuda', required=True, type=int, default=0)
 @click.option('--random_seed', required=False, type=int, default=42)
 @click.option('--resume_from', required=False, type=str, default=None, help='체크포인트 파일 경로')
-def main(cuda, run_tag, random_seed, resume_from):
+@click.option('--output_dir', required=False, type=str, default="model_pretrained/model1", help='모델 및 로그 저장 경로')
+def main(cuda, random_seed, resume_from, output_dir):
     """
     GAN v5 모델 훈련 - NPY 데이터 사용
-    
     Args:
         cuda: GPU 번호
-        run_tag: 실험 태그 (로그 구분용)
         random_seed: 랜덤 시드 (옵션)
         resume_from: 이어서 학습할 체크포인트 경로 (옵션)
+        output_dir: 모델 및 로그 저장 경로 (옵션)
     """
     # for tensorboard logs
     try:
@@ -50,16 +49,17 @@ def main(cuda, run_tag, random_seed, resume_from):
     except OSError:
         pass
 
+    # Ensure output_dir exists
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Create subdirectories directly in output_dir
+    os.makedirs(os.path.join(output_dir, "images"), exist_ok=True)
+
     log_formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     logging.basicConfig(level=logging.INFO)
-    latest_model_id = get_latest_model_id(dir_name="model1") + 1
-    prefix = f'{latest_model_id}_{run_tag}_tmp_'
-    temp_model_dir = TemporaryDirectory(dir="model1", prefix=prefix)
-    temp_model_dir.cleanup()
-    Path(temp_model_dir.name).mkdir(parents=True, exist_ok=False)
-    Path(os.path.join(temp_model_dir.name), "images").mkdir(parents=True, exist_ok=False)
-    Path(os.path.join(temp_model_dir.name), "weights").mkdir(parents=True, exist_ok=False)
-    temp_log_file = os.path.join(temp_model_dir.name, 'log.txt')
+    latest_model_id = get_latest_model_id(dir_name=output_dir) + 1
+    
+    temp_log_file = os.path.join(output_dir, 'log.txt')
     file_handler = logging.FileHandler(temp_log_file)
     file_handler.setFormatter(log_formatter)
     stream_handler = logging.StreamHandler(sys.stdout)
@@ -71,10 +71,10 @@ def main(cuda, run_tag, random_seed, resume_from):
 
     device = torch.device(f"cuda:{cuda}" if torch.cuda.is_available() else "cpu")
     logger.info(f'Training begin on {device}')
-    logger.info(f'Tmp model dir {temp_model_dir.name}')
+    logger.info(f'Model dir {output_dir}')
 
     with open(__file__, 'r') as f:
-        with open(os.path.join(temp_model_dir.name, "script.py"), 'w') as out:
+        with open(os.path.join(output_dir, "script.py"), 'w') as out:
             print("# This file was saved automatically during the experiment run.\n", end='', file=out)
             for line in f.readlines():
                 print(line, end='', file=out)
@@ -92,8 +92,8 @@ def main(cuda, run_tag, random_seed, resume_from):
     bs = 512
     
     # NPY 파일 경로 설정
-    train_data_path = "data/train_X.npy"
-    train_labels_path = "data/train_intY.npy"
+    train_data_path = "data/train_X_model1.npy"
+    train_labels_path = "data/train_Y_model1.npy"
 
     noise_size = 100
     conditioning_size = 1
@@ -325,7 +325,7 @@ def main(cuda, run_tag, random_seed, resume_from):
 
             real_plots = time_series_to_plot(real_display["shot"].cpu())
             for idx, rp in enumerate(real_plots):
-                fp_real = os.path.join(temp_model_dir.name, "images", f"{epoch}_epoch_real_{idx}.jpg")
+                fp_real = os.path.join(output_dir, "images", f"{epoch}_epoch_real_{idx}.jpg")
                 ndarr = rp.to('cpu', torch.uint8).permute(1, 2, 0).numpy()
                 im = Image.fromarray(ndarr, mode="RGB")
                 im.save(fp_real, format=None)
@@ -351,7 +351,7 @@ def main(cuda, run_tag, random_seed, resume_from):
 
             fake_plots = time_series_to_plot(fake_display["shot"])
             for idx, fp in enumerate(fake_plots):
-                fp_fake = os.path.join(temp_model_dir.name, "images", f"{epoch}_epoch_fake_{idx}.jpg")
+                fp_fake = os.path.join(output_dir, "images", f"{epoch}_epoch_fake_{idx}.jpg")
                 ndarr = fp.to('cpu', torch.uint8).permute(1, 2, 0).numpy()
                 im = Image.fromarray(ndarr, mode="RGB")
                 im.save(fp_fake, format=None)
@@ -364,18 +364,13 @@ def main(cuda, run_tag, random_seed, resume_from):
                 'optimizer_G_state_dict': optimizerG.state_dict(),
                 'optimizer_D_state_dict': optimizerD.state_dict(),
             }
-            checkpoint_path = os.path.join(temp_model_dir.name, "weights", f"{epoch}_epoch_checkpoint.pth")
+            checkpoint_path = os.path.join(output_dir, f"{epoch}_epoch_checkpoint.pth")
             torch.save(checkpoint, checkpoint_path)
             logger.info(f'체크포인트 저장됨: {checkpoint_path}')
 
     logger.info(f'Finished training for {epochs} epochs.')
 
     file_handler.close()
-
-    os.rename(
-        temp_model_dir.name,
-        os.path.join("model1", f'{latest_model_id}_{run_tag}')
-    )
 
 if __name__ == '__main__':
     main()
