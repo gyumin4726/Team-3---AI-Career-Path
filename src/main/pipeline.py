@@ -167,6 +167,19 @@ class TEPPipeline:
         """
         return self.model3_module.get_results()
 
+    def get_model3_results_for_llm(self, original_sequence: np.ndarray, fault_time: int) -> Dict[str, Any]:
+        """
+        Model3의 결과를 LLM에게 전달하기 위한 형태로 반환합니다.
+        
+        Args:
+            original_sequence: (B, 50, 52) - 원본 입력 데이터
+            fault_time: 슬라이딩 윈도우 인덱스 기준 fault 시점
+            
+        Returns:
+            Model3 LLM용 결과 딕셔너리
+        """
+        return self.model3_module.get_results_for_llm(original_sequence, fault_time)
+
 def main():
     """메인 실행 함수"""
     print("TEP 파이프라인 테스트 시작")

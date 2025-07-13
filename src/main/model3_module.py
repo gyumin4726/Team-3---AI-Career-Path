@@ -170,6 +170,69 @@ class Model3Module:
             self.results['predicted_sequence'] = data_sequence.copy()
             return self.results['predicted_sequence']
     
+    def summarize_top3_x_changes(self, predicted_sequence: np.ndarray, original_sequence: np.ndarray, fault_time: int):
+        """
+        Model3 예측 전후로 변화가 큰 변수 Top 3와 통계 요약 반환
+        Args:
+            predicted_sequence: (B, 50, 52) - Model3 예측 결과
+            original_sequence: (B, 50, 52) - 원본 입력 데이터
+            fault_time: 슬라이딩 윈도우 인덱스 기준 fault 시점
+        Returns:
+            {
+                'top3_indices': [int, int, int],
+                'stats': {
+                    idx: {
+                        'before_mean': float,
+                        'after_mean': float,
+                        'delta_mean': float,
+                        'before_std': float,
+                        'after_std': float,
+                        'delta_max': float,
+                        'delta_min': float
+                    }, ...
+                }
+            }
+        """
+        # 반응 변수(X)만 추출 (0~40)
+        pred_x = predicted_sequence[:, :, :41]
+        orig_x = original_sequence[:, :, :41]
+
+        # fault_time 이후 구간만 추출 (B, 50, 41) → (N, 41)
+        B, T, X = pred_x.shape
+        total_steps = B * T
+        pred_x_flat = pred_x.reshape(total_steps, X)
+        orig_x_flat = orig_x.reshape(total_steps, X)
+
+        # fault_time 이후만
+        pred_x_after = pred_x_flat[fault_time:]
+        orig_x_after = orig_x_flat[fault_time:]
+
+        # 변수별 변화량 (예측 - 원본)의 절대값 평균
+        delta = np.abs(pred_x_after - orig_x_after)
+        delta_mean = delta.mean(axis=0)  # (41,)
+
+        # 변화량 큰 변수 Top 3 인덱스
+        top3_indices = np.argsort(delta_mean)[-3:][::-1].tolist()
+
+        stats = {}
+        for idx in top3_indices:
+            before = orig_x_flat[:fault_time, idx]
+            after_pred = pred_x_flat[fault_time:, idx]
+            after_orig = orig_x_flat[fault_time:, idx]
+            stats[idx] = {
+                'before_mean': float(np.mean(before)) if before.size > 0 else None,
+                'after_mean': float(np.mean(after_pred)) if after_pred.size > 0 else None,
+                'delta_mean': float(np.mean(np.abs(after_pred - after_orig))) if after_pred.size > 0 else None,
+                'before_std': float(np.std(before)) if before.size > 0 else None,
+                'after_std': float(np.std(after_pred)) if after_pred.size > 0 else None,
+                'delta_max': float(np.max(np.abs(after_pred - after_orig))) if after_pred.size > 0 else None,
+                'delta_min': float(np.min(np.abs(after_pred - after_orig))) if after_pred.size > 0 else None
+            }
+        return {
+            'top3_indices': top3_indices,
+            'stats': stats
+        }
+    
     def get_results(self) -> Dict[str, Any]:
         """
         Model3 결과 반환
@@ -189,3 +252,40 @@ class Model3Module:
             로드되었으면 True, 아니면 False
         """
         return self.model3 is not None 
+
+    def get_results_for_llm(self, original_sequence: np.ndarray, fault_time: int) -> dict:
+        """
+        LLM에게 전달할 Model3 요약 결과 반환
+        Args:
+            original_sequence: (B, 50, 52) - 원본 입력 데이터
+            fault_time: 슬라이딩 윈도우 인덱스 기준 fault 시점
+        Returns:
+            {
+                'fault_time': fault_time,
+                'top3_indices': [...],
+                'top3_stats': {...},
+                'summary': str
+            }
+        """
+        predicted_sequence = self.results['predicted_sequence']
+        summary_data = self.summarize_top3_x_changes(predicted_sequence, original_sequence, fault_time)
+        top3_indices = summary_data['top3_indices']
+        stats = summary_data['stats']
+
+        # 간단한 요약 설명 생성
+        summary_lines = [
+            f"fault_time={fault_time} 이후 예측된 반응 변수(X)의 변화가 큰 Top 3 변수는 {top3_indices}입니다.",
+        ]
+        for idx in top3_indices:
+            s = stats[idx]
+            summary_lines.append(
+                f"  - 변수 {idx}: fault 이전 평균={s['before_mean']:.3f}, fault 이후 예측 평균={s['after_mean']:.3f}, 변화량 평균={s['delta_mean']:.3f}, 변화량 최대={s['delta_max']:.3f}"
+            )
+        summary = '\n'.join(summary_lines)
+
+        return {
+            'fault_time': fault_time,
+            'top3_indices': top3_indices,
+            'top3_stats': stats,
+            'summary': summary
+        } 
