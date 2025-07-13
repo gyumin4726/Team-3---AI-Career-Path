@@ -26,9 +26,7 @@ class Model3Module:
         self.model3 = None
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.results = {
-            'predicted_x': None,
-            'fault_time': None,
-            'context_size': None
+            'predicted_sequence': None
         }
         
         # 하이퍼파라미터 (train_model3.py와 동일)
@@ -60,7 +58,7 @@ class Model3Module:
             print(f"Model3 로드 실패: {e}")
             self.model3 = None
     
-    def predict_response_variables(self, data_sequence: np.ndarray, 
+    def predict_new_sequence(self, data_sequence: np.ndarray, 
                                  fault_time: int) -> np.ndarray:
         """
         반응 변수 예측 (Model3) - evaluate_model3.py와 동일한 로직
@@ -79,9 +77,8 @@ class Model3Module:
         if self.model3 is None:
             print("Model3이 로드되지 않았습니다. 임시 결과를 사용합니다.")
             # 전체 데이터 반환
-            self.results['predicted_x'] = data_sequence.copy()
-            self.results['fault_time'] = fault_time
-            return self.results['predicted_x']
+            self.results['predicted_sequence'] = data_sequence.copy()
+            return self.results['predicted_sequence']
         
         try:
             # evaluate_model3.py와 동일한 방식으로 처리
@@ -162,8 +159,7 @@ class Model3Module:
             predicted_data = np.concatenate(predicted_x_list, axis=0)
             
             # 결과 저장 (전체 데이터 반환)
-            self.results['predicted_x'] = predicted_data
-            self.results['fault_time'] = fault_time
+            self.results['predicted_sequence'] = predicted_data
             
             print(f"결과: 예측된 전체 시퀀스 형태={predicted_data.shape}")
             return predicted_data
@@ -171,9 +167,8 @@ class Model3Module:
         except Exception as e:
             print(f"Model3 예측 중 오류: {e}")
             # 오류 발생 시 원본 데이터 반환
-            self.results['predicted_x'] = data_sequence.copy()
-            self.results['fault_time'] = fault_time
-            return self.results['predicted_x']
+            self.results['predicted_sequence'] = data_sequence.copy()
+            return self.results['predicted_sequence']
     
     def get_results(self) -> Dict[str, Any]:
         """
@@ -183,8 +178,7 @@ class Model3Module:
             Model3 결과 딕셔너리
         """
         return {
-            'predicted_x': self.results['predicted_x'],
-            'fault_time': self.results['fault_time']
+            'predicted_sequence': self.results['predicted_sequence']
         }
     
     def is_loaded(self) -> bool:

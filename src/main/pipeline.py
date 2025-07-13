@@ -17,6 +17,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'data'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 # from LLM import LLM  # 임시로 주석 처리
 from model1_module import Model1Module
+from model3_module import Model3Module
 from src.data.dataset import TEPNPYDataset, CSVToTensor
 
 class TEPPipeline:
@@ -39,6 +40,9 @@ class TEPPipeline:
         
         # Model1 모듈 초기화
         self.model1_module = Model1Module()
+        
+        # Model3 모듈 초기화
+        self.model3_module = Model3Module()
         
     def run_full_pipeline(self, data_sequence: np.ndarray) -> Dict[str, Any]:
         """
@@ -91,16 +95,20 @@ class TEPPipeline:
             fault_time_for_model2 = model2_results['fault_time']  # 0~4599 범위
             
             # 2단계: 조작 변수 정상화 (Model2에 fault 정보 전달)
-            normalized_m = self.step2_normalize_manipulated_variables(m_sequence, fault_class, fault_time_for_model2)
+            # TODO: Model2 구현 필요
+            normalized_m = m_sequence.copy()  # 임시로 원본 복사
             
             # 3단계: 반응 변수 예측 (Model3에 fault 정보 전달)
-            predicted_x = self.step3_predict_response_variables(x_sequence, fault_class, fault_time_for_model2)
+            predicted_x = self.model3_module.predict_new_sequence(x_sequence, fault_time_for_model2)
             
-            # 정상화된 데이터 결합 (m' + x')
-            normalized_data = np.concatenate([normalized_m, predicted_x], axis=2)  # (B, 50, 104)
+            # 정상화된 데이터 결합
+            # Model3이 이미 전체 데이터를 반환하므로 그대로 사용
+            normalized_data = predicted_x
+            
+            print(f"정상화된 데이터 결합 완료: {normalized_data.shape}")
             
             # 4단계: 정상 여부 재분류 (Model4 = Model1 재사용)
-            final_class = self.step4_reclassify_normal_status(normalized_data)
+            fault_time, final_class = self.model1_module.detect_fault(normalized_data)
             
             # Model4 결과에 따른 분기 처리
             if final_class == "normal":
@@ -158,78 +166,6 @@ class TEPPipeline:
             Model3 결과 딕셔너리
         """
         return self.model3_module.get_results()
-    
-    def step2_normalize_manipulated_variables(self, m_sequence: np.ndarray, fault_class: str, fault_time: int) -> np.ndarray:
-        """
-        2단계: 조작 변수 정상화 (Model2: Conditional TCN-AE)
-        
-        Args:
-            m_sequence: 전체 m 시퀀스
-            fault_class: Model1에서 감지된 fault 종류
-            fault_time: Model1에서 감지된 fault 시점 (0~4599 범위의 슬라이딩 윈도우 인덱스)
-            
-        Returns:
-            normalized_m: 정상화된 m' 시퀀스
-        """
-        print("2단계: 조작 변수 정상화")
-        print(f"입력: m 시퀀스 형태={m_sequence.shape}")
-        print(f"Fault 시점: {fault_time} (슬라이딩 윈도우 인덱스 0~4599)")
-        print(f"Fault 클래스: {fault_class}")
-        
-        # TODO: Model2 구현 (Conditional TCN-AE)
-        # 현재는 임시 결과
-        self.normalized_m = m_sequence.copy()  # 임시로 원본 복사
-        
-        print(f"결과: 정상화된 m' 시퀀스 형태={self.normalized_m.shape}")
-        return self.normalized_m
-    
-    def step3_predict_response_variables(self, x_sequence: np.ndarray, m_sequence: np.ndarray, fault_class: str, fault_time: int) -> np.ndarray:
-        """
-        3단계: 반응 변수 예측 (Model3: RSSM)
-        
-        Args:
-            x_sequence: 반응 변수 시퀀스 (B, 50, 41)
-            m_sequence: 조작 변수 시퀀스 (B, 50, 11)
-            fault_class: Model1에서 감지된 fault 종류
-            fault_time: Model1에서 감지된 fault 시점 (0~4599 범위의 슬라이딩 윈도우 인덱스)
-            
-        Returns:
-            predicted_x: 예측된 x' 시퀀스
-        """
-        print("3단계: 반응 변수 예측")
-        print(f"입력: x 시퀀스 형태={x_sequence.shape}")
-        print(f"입력: m 시퀀스 형태={m_sequence.shape}")
-        print(f"Fault 시점: {fault_time} (슬라이딩 윈도우 인덱스 0~4599)")
-        
-        # Model3 모듈을 사용하여 반응 변수 예측
-        self.predicted_x = self.model3_module.predict_response_variables(
-            x_sequence, m_sequence, fault_class, fault_time
-        )
-        
-        print(f"결과: 예측된 x' 시퀀스 형태={self.predicted_x.shape}")
-        return self.predicted_x
-    
-    def step4_reclassify_normal_status(self, normalized_data: np.ndarray) -> str:
-        """
-        4단계: 정상 여부 재분류 (Model4 ≡ Model1 재사용)
-        
-        Args:
-            normalized_data: 정상화된 데이터 (m' + x' 결합)
-            
-        Returns:
-            final_class: 최종 fault class 예측 결과
-        """
-        print("4단계: 정상 여부 재분류 (Model1 재사용)")
-        print(f"입력: 정상화된 데이터 형태={normalized_data.shape}")
-        
-        # Model1을 재사용하여 정상화된 데이터의 fault 상태 재분류
-        fault_time, fault_class = self.model1_module.detect_fault(normalized_data)
-        
-        print(f"Model4 결과: {fault_class}")
-        
-        self.final_class = fault_class
-        return self.final_class
-
 
 def main():
     """메인 실행 함수"""
