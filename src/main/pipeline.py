@@ -15,7 +15,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'LLM'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'model1'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'data'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
-# from LLM import LLM  # 임시로 주석 처리
+from LLM import LLM
 from model1_module import Model1Module
 from model3_module import Model3Module
 from src.data.dataset import TEPNPYDataset, CSVToTensor
@@ -33,7 +33,7 @@ class TEPPipeline:
     
     def __init__(self):
         """파이프라인 초기화"""
-        # self.llm = LLM()  # 임시로 주석 처리
+        self.llm = LLM()
         self.normalized_m = None
         self.predicted_x = None
         self.final_class = None
@@ -64,6 +64,13 @@ class TEPPipeline:
         # Model1 결과에 따른 분기 처리
         if self.model1_module.is_normal():
             print("정상 상태 감지 - 파이프라인 종료")
+            
+            # LLM에게 Model1 결과 전달
+            model1_results = self.get_model1_results_for_llm()
+            model1_explanation = self.llm.generate_response(
+                f"Model1 결과를 설명해주세요: {model1_results}"
+            )
+            
             results = {
                 'fault_time': fault_time,
                 'fault_class': fault_class,
@@ -71,7 +78,10 @@ class TEPPipeline:
                 'predicted_x': None,
                 'final_class': 'normal',
                 'success': True,
-                'pipeline_status': 'early_termination_normal'
+                'pipeline_status': 'early_termination_normal',
+                'llm_explanations': {
+                    'model1': model1_explanation
+                }
             }
             print("="*60)
             print("파이프라인 완료 (정상 상태)")
@@ -113,6 +123,18 @@ class TEPPipeline:
             # Model4 결과에 따른 분기 처리
             if final_class == "normal":
                 print(f"반복 {current_iteration}: 정상화 완료!")
+                
+                # LLM에게 Model1과 Model3 결과 전달
+                model1_results = self.get_model1_results_for_llm()
+                model1_explanation = self.llm.generate_response(
+                    f"Model1 결과를 설명해주세요: {model1_results}"
+                )
+                
+                model3_results = self.get_model3_results_for_llm(data_sequence, fault_time_for_model2)
+                model3_explanation = self.llm.generate_response(
+                    f"Model3 결과를 설명해주세요: {model3_results}"
+                )
+                
                 results = {
                     'fault_time': fault_time,  # LLM용 원본 시점 (0~959)
                     'fault_class': fault_class,
@@ -121,7 +143,11 @@ class TEPPipeline:
                     'final_class': final_class,
                     'success': True,
                     'pipeline_status': f'normalized_after_iteration_{current_iteration}',
-                    'iterations': current_iteration
+                    'iterations': current_iteration,
+                    'llm_explanations': {
+                        'model1': model1_explanation,
+                        'model3': model3_explanation
+                    }
                 }
                 print("="*60)
                 print(f"파이프라인 완료! (반복 {current_iteration}회 후 정상화 성공)")
@@ -134,6 +160,18 @@ class TEPPipeline:
         
         # 최대 반복 횟수 초과
         print(f"최대 반복 횟수({max_iterations}) 초과 - 정상화 실패")
+        
+        # LLM에게 Model1과 Model3 결과 전달
+        model1_results = self.get_model1_results_for_llm()
+        model1_explanation = self.llm.generate_response(
+            f"Model1 결과를 설명해주세요: {model1_results}"
+        )
+        
+        model3_results = self.get_model3_results_for_llm(data_sequence, fault_time_for_model2)
+        model3_explanation = self.llm.generate_response(
+            f"Model3 결과를 설명해주세요: {model3_results}"
+        )
+        
         results = {
             'fault_time': fault_time,  # LLM용 원본 시점 (0~959)
             'fault_class': fault_class,
@@ -142,7 +180,11 @@ class TEPPipeline:
             'final_class': final_class,
             'success': False,
             'pipeline_status': 'max_iterations_exceeded',
-            'iterations': max_iterations
+            'iterations': max_iterations,
+            'llm_explanations': {
+                'model1': model1_explanation,
+                'model3': model3_explanation
+            }
         }
         
         print("="*60)
@@ -237,9 +279,12 @@ def main():
     # LLM으로 결과 설명
     print("\n" + "="*60)
     print("LLM 결과 해설:")
-    print("LLM 설명 기능은 현재 비활성화되어 있습니다.")
-    print("Model1 결과:", pipeline.get_model1_results_for_llm())
-    print("Model3 결과:", pipeline.get_model3_results())
+    if 'llm_explanations' in results:
+        print("Model1 설명:", results['llm_explanations'].get('model1', 'N/A'))
+        if 'model3' in results['llm_explanations']:
+            print("Model3 설명:", results['llm_explanations']['model3'])
+    else:
+        print("LLM 설명이 생성되지 않았습니다.")
 
 if __name__ == "__main__":
     main() 
