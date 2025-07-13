@@ -16,9 +16,9 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'model1'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'data'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 from LLM import LLM
-from model1_module import Model1Module
-from model2_module import Model2Module
-from model3_module import Model3Module
+from .model1_module import Model1Module
+from .model2_module import Model2Module
+from .model3_module import Model3Module
 from src.data.dataset import TEPNPYDataset, CSVToTensor
 
 class TEPPipeline:
