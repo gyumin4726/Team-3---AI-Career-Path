@@ -56,17 +56,15 @@ class Model2Module:
 
     def normalize_after_fault(self,
                               model1_output: np.ndarray,
-                              original_input: np.ndarray,
                               fault_time: int,
                               k: int = 3,
                               method: str = 'mean') -> Dict[str, np.ndarray]:
         """
-        Model1 출력 + 원본을 받아 고장 이후 구간만 보정
+        Model1 출력을 받아 고장 이후 구간의 조작 변수(M)만 보정 (Model3과 동일한 fault_time 처리)
 
         Args:
-            model1_output: (N, T, D) - Model1 출력
-            original_input: (N, T, D) - 원본 입력
-            fault_time: 고장 시점 인덱스
+            model1_output: (N, T, D) - Model1 출력 (원본과 동일)
+            fault_time: 고장 시점 인덱스 (슬라이딩 윈도우 인덱스)
             k: 최근접 이웃 개수
             method: 'mean' 또는 'first'
 
@@ -81,45 +79,79 @@ class Model2Module:
         assert D == 52, "전체 시퀀스는 52차원 (반응 + 조작 변수) 이어야 합니다."
 
         input_tensor = torch.tensor(model1_output, dtype=torch.float32).to(DEVICE)  # (N, T, D)
-        orig_tensor = torch.tensor(original_input, dtype=torch.float32).to(DEVICE)
-
-        output_tensor = input_tensor.clone()
-
+        
+        # X/M 분할 (반응 변수: 0~40, 조작 변수: 41~51)
+        x_part = input_tensor[:, :, :41]  # (N, T, 41) - 반응 변수 (그대로 유지)
+        m_part = input_tensor[:, :, 41:]  # (N, T, 11) - 조작 변수 (보정 대상)
+        
+        output_m = m_part.clone()
+        
+        # fault_time을 배치 인덱스로 변환 (Model3과 동일)
+        batch_idx = fault_time // 50  # 어느 배치에 속하는지
+        timestep_in_batch = fault_time % 50  # 배치 내 시점
+        
+        print(f"fault_time: {fault_time} -> 배치 {batch_idx}, 배치 내 시점 {timestep_in_batch}")
+        
         for i in range(N):
             if fault_time is None or fault_time >= T:
                 continue
-            # 고장 이후 부분만 보정
-            post_fault = input_tensor[i, fault_time:, :]  # (T-fault_time, D)
+                
+            # Model3과 동일한 방식: 배치 단위로 처리
+            if batch_idx < m_part.shape[0]:  # 배치 범위 내
+                # 컨텍스트: 배치 0~batch_idx (현재 배치까지 포함)
+                context_m = m_part[i, :batch_idx+1, :]  # 이전 배치들 + 현재 배치
+                
+                # 미래: 배치 batch_idx+1부터 끝까지
+                if batch_idx + 1 < m_part.shape[0]:
+                    post_fault_m = m_part[i, batch_idx+1:, :]  # 이후 배치들
+                else:
+                    # 현재 배치가 마지막인 경우 빈 텐서 생성
+                    post_fault_m = torch.empty(0, m_part.shape[1], m_part.shape[2], device=m_part.device)
+                
+                # 정상 DB도 동일한 방식으로 처리
+                if batch_idx < self.normal_db.shape[0]:
+                    normal_db_context = self.normal_db[:, :batch_idx+1, 41:]  # (N_normal, batch_idx+1, 11)
+                    normal_db_post_fault = self.normal_db[:, batch_idx+1:, 41:]  # (N_normal, T-batch_idx-1, 11)
+                else:
+                    normal_db_context = self.normal_db[:, :, 41:]  # (N_normal, T, 11)
+                    normal_db_post_fault = torch.empty(0, m_part.shape[1], m_part.shape[2], device=m_part.device)
+                
+                # KNN 보정 (조작 변수만) - Model3과 동일한 방식
+                if post_fault_m.shape[0] > 0:
+                    corrected_m = self.normalize_by_knn(post_fault_m, normal_db_post_fault, k=k, method=method)  # (T-batch_idx-1, 11)
+                    output_m[i, batch_idx+1:, :] = corrected_m
+            else:
+                # fault_time이 범위를 벗어난 경우 기본값 사용
+                context_m = m_part[i, :, :]  # 전체 시퀀스
+                post_fault_m = torch.empty(0, m_part.shape[1], m_part.shape[2], device=m_part.device)
 
-            # 정상 DB도 고장 이후 시점만 사용해 길이 맞추기
-            normal_db_post_fault = self.normal_db[:, fault_time:, :]  # (N_normal, T-fault_time, D)  # (N_normal, T-fault_time, D)
-
-            # KNN 보정 함수에 정상 DB 부분도 넘기도록 수정 필요
-            corrected = self.normalize_by_knn(post_fault, normal_db_post_fault, k=k, method=method)  # (T-fault_time, D)
-            output_tensor[i, fault_time:, :] = corrected
-
-        # X/M 분할 (반응 변수: 0~40, 조작 변수: 41~51)
-        reconstructed_all = output_tensor.detach().cpu().numpy()
-        x_part = reconstructed_all[:, :, :41]  # (N, T, 41)
-        m_part = reconstructed_all[:, :, 41:]  # (N, T, 11)
-
-        # 변화량 요약 저장
+        # X와 보정된 M 결합
+        combined_data = torch.cat([x_part, output_m], dim=2)  # (N, T, 52)
+        
+        # 변화량 요약 저장 (조작 변수만)
         delta_summary = self.compute_delta_summary(
-            before=model1_output[:, fault_time:, :],
-            after=reconstructed_all[:, fault_time:, :]
+            before=model1_output[:, fault_time:, 41:],  # 조작 변수만
+            after=combined_data.detach().cpu().numpy()[:, fault_time:, 41:]  # 조작 변수만
         )
 
         self.results = {
             'fault_time': fault_time,
+            'batch_idx': batch_idx,
+            'timestep_in_batch': timestep_in_batch,
             'k_used': k,
             'normalized': True,
+            'normalized_m_only': True,
             'delta_summary': delta_summary
         }
 
+        reconstructed_all = combined_data.detach().cpu().numpy()
+        x_part_np = reconstructed_all[:, :, :41]  # (N, T, 41)
+        m_part_np = reconstructed_all[:, :, 41:]  # (N, T, 11)
+
         return {
             'reconstructed_all': reconstructed_all,
-            'X': x_part,
-            'M': m_part
+            'X': x_part_np,
+            'M': m_part_np
         }
 
     def compute_delta_summary(self, before: np.ndarray, after: np.ndarray, topk: int = 3):

@@ -17,6 +17,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'data'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 from LLM import LLM
 from model1_module import Model1Module
+from model2_module import Model2Module
 from model3_module import Model3Module
 from src.data.dataset import TEPNPYDataset, CSVToTensor
 
@@ -26,13 +27,18 @@ class TEPPipeline:
     
     4단계 파이프라인:
     1. Model1: Fault 시점 탐지 + Fault 종류 분류
-    2. Model2: 조작 변수 정상화 (Conditional TCN-AE)
+    2. Model2: 조작 변수 정상화 (KNN 기반)
     3. Model3: 반응 변수 예측 (TCNSeq2Seq)
     4. Model4: 정상 여부 재분류 (Model1 재사용)
     """
     
-    def __init__(self):
-        """파이프라인 초기화"""
+    def __init__(self, normal_db: np.ndarray = None):
+        """
+        파이프라인 초기화
+        
+        Args:
+            normal_db: 정상 DB 데이터 (N_normal, T, D) - Model2용
+        """
         self.llm = LLM()
         self.normalized_m = None
         self.predicted_x = None
@@ -40,6 +46,13 @@ class TEPPipeline:
         
         # Model1 모듈 초기화
         self.model1_module = Model1Module()
+        
+        # Model2 모듈 초기화 (정상 DB 필요)
+        if normal_db is not None:
+            self.model2_module = Model2Module(normal_db)
+        else:
+            print("Warning: normal_db가 제공되지 않아 Model2를 사용할 수 없습니다.")
+            self.model2_module = None
         
         # Model3 모듈 초기화
         self.model3_module = Model3Module()
@@ -97,30 +110,37 @@ class TEPPipeline:
             current_iteration += 1
             print(f"비정상 상태 감지: {fault_class} - 반복 {current_iteration}/{max_iterations}")
             
-            # TODO: 나중에 m과 x 분리 로직 구현
-            # 현재는 전체 데이터를 m과 x로 동일하게 사용
-            m_sequence = data_sequence  # (B, 50, 52) - 나중에 조작 변수만 추출
-            x_sequence = data_sequence  # (B, 50, 52) - 나중에 반응 변수만 추출
-            
             # Model2용 결과 가져오기 (슬라이딩 윈도우 인덱스)
             model2_results = self.model1_module.get_results_for_model2()
             fault_time_for_model2 = model2_results['fault_time']  # 0~4599 범위
             
-            # 2단계: 조작 변수 정상화 (Model2에 fault 정보 전달)
-            # TODO: Model2 구현 필요
-            normalized_m = m_sequence.copy()  # 임시로 원본 복사
+            # 2단계: 조작 변수 정상화 (Model2)
+            if self.model2_module is not None:
+                print("Model2: 조작 변수 정상화 시작...")
+                model2_results = self.model2_module.normalize_after_fault(
+                    model1_output=data_sequence,
+                    fault_time=fault_time_for_model2,
+                    k=3,
+                    method='mean'
+                )
+                normalized_m = model2_results['M']  # 조작 변수 (11개)
+                normalized_x = model2_results['X']  # 반응 변수 (41개)
+                normalized_data = model2_results['reconstructed_all']  # 전체 52차원 데이터
+                print(f"Model2 완료: 조작 변수 {normalized_m.shape}, 반응 변수 {normalized_x.shape}, 전체 {normalized_data.shape}")
+            else:
+                print("Model2: 정상 DB 없음 - 원본 데이터 사용")
+                # X/M 분할 (반응 변수: 0~40, 조작 변수: 41~51)
+                normalized_m = data_sequence[:, :, 41:]  # (B, 50, 11) - 조작 변수
+                normalized_x = data_sequence[:, :, :41]  # (B, 50, 41) - 반응 변수
+                normalized_data = data_sequence  # 전체 52차원 데이터
             
-            # 3단계: 반응 변수 예측 (Model3에 fault 정보 전달)
-            predicted_x = self.model3_module.predict_new_sequence(x_sequence, fault_time_for_model2)
+            # 3단계: 반응 변수 예측 (Model3에 52차원 데이터 전달)
+            predicted_data = self.model3_module.predict_new_sequence(normalized_data, fault_time_for_model2)
             
-            # 정상화된 데이터 결합
-            # Model3이 이미 전체 데이터를 반환하므로 그대로 사용
-            normalized_data = predicted_x
-            
-            print(f"정상화된 데이터 결합 완료: {normalized_data.shape}")
+            print(f"Model3 완료: 예측된 데이터 형태 {predicted_data.shape}")
             
             # 4단계: 정상 여부 재분류 (Model4 = Model1 재사용)
-            model4_results = self.model1_module.detect_fault(normalized_data)
+            model4_results = self.model1_module.detect_fault(predicted_data)
             fault_time = model4_results.get('fault_time')
             final_class = model4_results.get('fault_class')
             
@@ -144,7 +164,7 @@ class TEPPipeline:
                     'fault_time': fault_time,  # LLM용 원본 시점 (0~959)
                     'fault_class': fault_class,
                     'normalized_m': normalized_m,
-                    'predicted_x': predicted_x,
+                    'predicted_x': predicted_data,
                     'final_class': final_class,
                     'success': True,
                     'pipeline_status': f'normalized_after_iteration_{current_iteration}',
@@ -160,7 +180,7 @@ class TEPPipeline:
             else:
                 print(f"반복 {current_iteration}: 정상화 실패, 다시 시도...")
                 # 다음 반복을 위해 현재 정상화된 데이터를 새로운 입력으로 사용
-                data_sequence = normalized_data
+                data_sequence = predicted_data
                 fault_class = final_class
         
         # 최대 반복 횟수 초과
@@ -181,7 +201,7 @@ class TEPPipeline:
             'fault_time': fault_time,  # LLM용 원본 시점 (0~959)
             'fault_class': fault_class,
             'normalized_m': normalized_m,
-            'predicted_x': predicted_x,
+            'predicted_x': predicted_data,
             'final_class': final_class,
             'success': False,
             'pipeline_status': 'max_iterations_exceeded',
