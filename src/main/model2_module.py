@@ -11,15 +11,51 @@ class Model2Module:
     - 출력: Model3 입력용 보정 시퀀스 (N, T, D) 및 X/M 분할
     """
 
-    def __init__(self, normal_db: np.ndarray):
+    def __init__(self, normal_m_db: np.ndarray = None):
         """
         Args:
-            normal_db: 정상 DB, shape (N_normal, T, D)
+            normal_m_db: 정상 조작 변수 DB, shape (N_normal, T, 11) - None이면 build_normal_db()로 구축
         """
-        self.normal_db = torch.tensor(normal_db, dtype=torch.float32).to(DEVICE)  # (N_normal, T, D)
-        self.T = normal_db.shape[1]
-        self.D = normal_db.shape[2]
+        if normal_m_db is not None:
+            self.normal_m_db = torch.tensor(normal_m_db, dtype=torch.float32).to(DEVICE)  # (N_normal, T, 11)
+            self.T = normal_m_db.shape[1]
+            self.M = normal_m_db.shape[2]  # 조작 변수 차원 (11)
+        else:
+            self.normal_m_db = None
+            self.T = None
+            self.M = 11  # 조작 변수 차원 (11)
         self.results = {}  # 내부 결과 저장용
+
+    @staticmethod
+    def build_normal_db(data_path: str, sample_size: int = 5000, random_seed: int = 42) -> np.ndarray:
+        """
+        정상 조작 변수 DB 구축
+        
+        Args:
+            data_path: 통합 X+M 데이터 경로 (shape: N, 50, 52)
+            sample_size: 샘플링할 정상 데이터 개수
+            random_seed: 랜덤 시드
+            
+        Returns:
+            normal_m_db: 정상 조작 변수 DB (sample_size, 50, 11)
+        """
+        print(f"정상 DB 구축 시작: {data_path}")
+        
+        # 1. 통합된 X+M 윈도우 데이터 로드
+        train_X_full = np.load(data_path)  # shape: (N, 50, 52)
+        print(f"로드된 데이터 shape: {train_X_full.shape}")
+        
+        # 2. 조작변수 M만 추출 (마지막 11차원)
+        train_M = train_X_full[:, :, 41:]  # shape: (N, 50, 11)
+        print(f"조작 변수 추출 shape: {train_M.shape}")
+        
+        # 3. 지정된 개수만큼 무작위 샘플링
+        np.random.seed(random_seed)
+        subset_idx = np.random.choice(train_M.shape[0], size=sample_size, replace=False)
+        train_M_sampled = train_M[subset_idx]  # shape: (sample_size, 50, 11)
+        
+        print(f"정상 DB 구축 완료: {train_M_sampled.shape}")
+        return train_M_sampled
 
     def compute_mse(self, a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
         """
@@ -58,7 +94,8 @@ class Model2Module:
                               model1_output: np.ndarray,
                               fault_time: int,
                               k: int = 3,
-                              method: str = 'mean') -> Dict[str, np.ndarray]:
+                              method: str = 'mean',
+                              data_path: str = None) -> Dict[str, np.ndarray]:
         """
         Model1 출력을 받아 고장 이후 구간의 조작 변수(M)만 보정 (Model3과 동일한 fault_time 처리)
 
@@ -67,6 +104,7 @@ class Model2Module:
             fault_time: 고장 시점 인덱스 (슬라이딩 윈도우 인덱스)
             k: 최근접 이웃 개수
             method: 'mean' 또는 'first'
+            data_path: 정상 DB가 없을 때 사용할 데이터 경로
 
         Returns:
             {
@@ -77,6 +115,15 @@ class Model2Module:
         """
         N, T, D = model1_output.shape
         assert D == 52, "전체 시퀀스는 52차원 (반응 + 조작 변수) 이어야 합니다."
+
+        # 정상 DB가 없으면 자동으로 구축
+        if self.normal_m_db is None:
+            if data_path is None:
+                raise ValueError("정상 DB가 없고 data_path도 제공되지 않았습니다.")
+            print("정상 DB가 없어 자동으로 구축합니다...")
+            normal_m_db = self.build_normal_db(data_path)
+            self.normal_m_db = torch.tensor(normal_m_db, dtype=torch.float32).to(DEVICE)
+            self.T = normal_m_db.shape[1]
 
         input_tensor = torch.tensor(model1_output, dtype=torch.float32).to(DEVICE)  # (N, T, D)
         
@@ -108,12 +155,12 @@ class Model2Module:
                     # 현재 배치가 마지막인 경우 빈 텐서 생성
                     post_fault_m = torch.empty(0, m_part.shape[1], m_part.shape[2], device=m_part.device)
                 
-                # 정상 DB도 동일한 방식으로 처리
-                if batch_idx < self.normal_db.shape[0]:
-                    normal_db_context = self.normal_db[:, :batch_idx+1, 41:]  # (N_normal, batch_idx+1, 11)
-                    normal_db_post_fault = self.normal_db[:, batch_idx+1:, 41:]  # (N_normal, T-batch_idx-1, 11)
+                # 정상 DB도 동일한 방식으로 처리 (조작 변수만)
+                if batch_idx < self.normal_m_db.shape[0]:
+                    normal_db_context = self.normal_m_db[:, :batch_idx+1, :]  # (N_normal, batch_idx+1, 11)
+                    normal_db_post_fault = self.normal_m_db[:, batch_idx+1:, :]  # (N_normal, T-batch_idx-1, 11)
                 else:
-                    normal_db_context = self.normal_db[:, :, 41:]  # (N_normal, T, 11)
+                    normal_db_context = self.normal_m_db[:, :, :]  # (N_normal, T, 11)
                     normal_db_post_fault = torch.empty(0, m_part.shape[1], m_part.shape[2], device=m_part.device)
                 
                 # KNN 보정 (조작 변수만) - Model3과 동일한 방식

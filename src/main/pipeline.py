@@ -32,17 +32,19 @@ class TEPPipeline:
     4. Model4: 정상 여부 재분류 (Model1 재사용)
     """
     
-    def __init__(self, normal_db: np.ndarray = None):
+    def __init__(self, normal_db: np.ndarray = None, data_path: str = None):
         """
         파이프라인 초기화
         
         Args:
-            normal_db: 정상 DB 데이터 (N_normal, T, D) - Model2용
+            normal_db: 정상 DB 데이터 (N_normal, T, 11) - Model2용 (조작 변수만)
+            data_path: 정상 DB가 없을 때 사용할 데이터 경로
         """
         self.llm = LLM()
         self.normalized_m = None
         self.predicted_x = None
         self.final_class = None
+        self.data_path = data_path
         
         # Model1 모듈 초기화
         self.model1_module = Model1Module()
@@ -51,8 +53,8 @@ class TEPPipeline:
         if normal_db is not None:
             self.model2_module = Model2Module(normal_db)
         else:
-            print("Warning: normal_db가 제공되지 않아 Model2를 사용할 수 없습니다.")
-            self.model2_module = None
+            print("Warning: normal_db가 제공되지 않았습니다. Model2 사용 시 자동으로 DB를 구축합니다.")
+            self.model2_module = Model2Module()  # None으로 초기화
         
         # Model3 모듈 초기화
         self.model3_module = Model3Module()
@@ -121,7 +123,8 @@ class TEPPipeline:
                     model1_output=data_sequence,
                     fault_time=fault_time,
                     k=3,
-                    method='mean'
+                    method='mean',
+                    data_path=self.data_path
                 )
                 normalized_m = model2_results['M']  # 조작 변수 (11개)
                 normalized_x = model2_results['X']  # 반응 변수 (41개)
@@ -131,7 +134,7 @@ class TEPPipeline:
                 print("Model2: 정상 DB 없음 - 원본 데이터 사용")
                 # X/M 분할 (반응 변수: 0~40, 조작 변수: 41~51)
                 normalized_m = data_sequence[:, :, 41:]  # (B, 50, 11) - 조작 변수
-                normalized_x = data_sequence[:, :, :41]  # (B, 50, 41) - 반응 변수
+                normalized_x = data_sequence[:, :, :41]  # 반응 변수 (41개)
                 normalized_data = data_sequence  # 전체 52차원 데이터
             
             # 3단계: 반응 변수 예측 (Model3에 52차원 데이터 전달)
