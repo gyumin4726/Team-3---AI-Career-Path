@@ -78,7 +78,7 @@ class TEPPipeline:
                 'fault_class': fault_class,
                 'normalized_m': None,
                 'predicted_x': None,
-                'final_class': 'normal',
+                'final_class': '정상',
                 'success': True,
                 'pipeline_status': 'early_termination_normal',
                 'llm_explanations': {
@@ -125,8 +125,8 @@ class TEPPipeline:
             final_class = model4_results.get('fault_class')
             
             # Model4 결과에 따른 분기 처리
-            print(f"DEBUG: final_class = '{final_class}', type = {type(final_class)}")
-            if final_class == "normal":
+            print(f"최종 분류 = '{final_class}'")
+            if final_class == "정상":
                 print(f"반복 {current_iteration}: 정상화 완료!")
                 
                 # LLM에게 Model1과 Model3 결과 전달

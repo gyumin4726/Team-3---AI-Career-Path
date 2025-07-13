@@ -128,7 +128,7 @@ class Model1Module:
             prediction_counts = Counter(all_predictions)
             print(f"시점별 예측 분포: {dict(prediction_counts)}")
             most_common_fault = prediction_counts.most_common(1)[0][0]
-            fault_class = f"fault_{most_common_fault}" if most_common_fault != 0 else "normal"
+            fault_class = f"fault_{most_common_fault}" if most_common_fault != 0 else "정상"
             detailed_fault_time, _, correct_preds = detect_fault_onset(
                 all_predictions, 
                 most_common_fault, 
@@ -141,7 +141,7 @@ class Model1Module:
             print(f"Model1 결과:")
             print(f"  - 예측된 fault 클래스: {fault_class}")
             print(f"  - 슬라이딩 윈도우 인덱스: {detailed_fault_time} / {total_timesteps}")
-            print(f"  - 원본 시점: {original_fault_time} / 959")
+            print(f"  - 원본 시점: {original_fault_time} / 960")
             if correct_preds:
                 print(f"  - 연속 정답 예측: {correct_preds}")
             if detailed_fault_time > 0:
@@ -159,11 +159,11 @@ class Model1Module:
                 'fault_time': self.results['fault_time'],
                 'original_fault_time': self.results['original_fault_time']
             }
-        is_normal = (fault_class == "normal")
+        is_normal = (fault_class == "정상")
         if is_normal:
             return {
                 'is_normal': True,
-                'fault_class': "normal",  # None 대신 "normal" 반환
+                'fault_class': "정상",  # None 대신 "normal" 반환
                 'fault_time': None,
                 'original_fault_time': None
             }
@@ -225,4 +225,4 @@ class Model1Module:
         Returns:
             정상이면 True, 비정상이면 False
         """
-        return self.results['fault_class'] == "normal" 
+        return self.results['fault_class'] == "정상" 
