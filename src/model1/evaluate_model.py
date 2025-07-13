@@ -328,8 +328,8 @@ def save_results(results, save_dir):
 
 @click.command()
 @click.option('--model_path', type=str, default='model_pretrained/model1/30_epoch_checkpoint.pth', help='학습된 discriminator 모델 경로 (.pth 파일)')
-@click.option('--test_data', type=str, default='data/test_X_model1.npy', help='테스트 데이터 NPY 파일 경로')
-@click.option('--test_labels', type=str, default='data/test_y_model1.npy', help='테스트 라벨 NPY 파일 경로')
+@click.option('--test_data', type=str, default='data/model3_results/model3_predicted_X.npy', help='테스트 데이터 NPY 파일 경로')
+@click.option('--test_labels', type=str, default='data/model3_results/model3_predicted_Y.npy', help='테스트 라벨 NPY 파일 경로')
 @click.option('--cuda', type=int, default=0, help='사용할 GPU 번호')
 @click.option('--batch_size', type=int, default=128, help='배치 크기')
 @click.option('--save_dir', type=str, default='evaluation_results/model1', help='결과 저장 디렉토리')
