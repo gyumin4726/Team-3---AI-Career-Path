@@ -67,6 +67,17 @@ TEP는 다양한 원료(feed), 순환/폐기, 반응기, 분리기, 스트리퍼
 
 ────────────────────────────────────────────
 
+📌 변수 인과관계 그래프(예시):
+
+- [조작 변수 m1~m11] --(조작/제어)--> [반응 변수 x1~x41] --(관측/결과)--> [제품 품질]
+- 예시:
+    - m1(D feed valve) → x2(D feed 유입량) → x6(Reactor feed rate) → x9(Reactor temperature)
+    - m10(Reactor cooling-water valve) → x21(Reactor cooling-water outlet T) → x9(Reactor temperature)
+    - m11(Condenser cooling-water valve) → x22(Separator cooling-water outlet T) → x11(Separator temperature)
+- 각 조작 변수(m)는 여러 반응 변수(x)에 영향을 미치며, 반응 변수들은 서로 연쇄적으로 영향을 주고받음
+
+이 그래프 구조를 참고하여, 변수 변화가 전체 시스템에 미치는 영향을 단계별로 설명할 수 있음
+
 💡 핵심 관계:
 - m은 시스템을 제어하는 입력 값 (조작 변수)
 - x는 m의 영향을 받아 변화하는 출력 값 (반응 변수)
