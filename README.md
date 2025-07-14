@@ -98,37 +98,26 @@ tennessee_eastman_diploma/
 
 ## 사용 방법
 
-### 1. 환경 설정
+### 1. 환경 설정 및 패키지 설치
 
 ```bash
-# 1. 새 CONDA 환경 생성
-conda create -n tep_project python=3.7 -y
-conda activate tep_project
+# 1. 새 가상환경 생성 (python 3.10)
+python -m venv tep_env
 
-# 2. 기본 과학 계산 패키지 설치
-conda install numpy pandas scipy matplotlib scikit-learn -y
+# 2. 가상환경 활성화
+# (Windows)
+tep_env\Scripts\activate
+# (Linux/Mac)
+source tep_env/bin/activate
 
-# 3. PyTorch 설치
-pip install torch==1.13.1 torchvision==0.14.1 torchaudio==0.13.1 --index-url https://download.pytorch.org/whl/cu117
+# 3. 필수 패키지 설치
+pip install -r requirements.txt
 
-# 4. 기타 필수 패키지 설치
-pip install pyreadr tensorboardx python-dotenv memory-profiler click pillow opencv-python scikit-image
-
-# 5. 프로젝트 로컬 설치
+# 4. 프로젝트 로컬 설치 (editable mode)
 pip install -e .
 ```
 
-### 2. 데이터 준비
-
-**필수: NPY 데이터 파일**
-
-```bash
-data/
-├── final_X.npy  # 전처리된 입력 데이터
-└── final_Y.npy  # 전처리된 라벨 데이터
-```
-
-### 3. 파이프라인 실행
+### 2. 파이프라인 실행
 
 **메인 파이프라인 실행**
 
@@ -143,7 +132,7 @@ python src/main/pipeline.py
 3. 비정상 상태 → Model2, Model3, Model4 실행
 4. Model4 결과에 따라 반복 또는 종료
 
-### 4. Model1 학습 방법
+### 3. Model1 학습 방법
 
 **Model1(GAN 기반 Fault 탐지/분류) 학습**
 
@@ -152,7 +141,7 @@ python -m src.model1.train_model
 ```
 - 기타 옵션은 `python -m src.model1.train_model --help`로 확인
 
-### 5. Model3 학습 방법
+### 4. Model3 학습 방법
 
 **Model3(TCNSeq2Seq 기반 반응 변수 예측) 학습**
 
