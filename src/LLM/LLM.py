@@ -36,13 +36,18 @@ class LLM:
 
     def generate_response(self, prompt: str, system_prompt_file: str = None) -> str:
         try:
+            # 항상 base_prompt.txt, dataset_prompt.txt, fault_list.txt를 system prompt로 포함
+            base_prompt = self.load_prompt_from_file('base_prompt.txt')
+            dataset_prompt = self.load_prompt_from_file('dataset_prompt.txt')
+            fault_list_prompt = self.load_prompt_from_file('fault_list.txt')
+            system_message = base_prompt + "\n\n" + dataset_prompt + "\n\n" + fault_list_prompt
+            # 추가 system_prompt_file이 있으면 덧붙임
             if system_prompt_file:
-                system_message = self.load_prompt_from_file(system_prompt_file)
-                response = self.model.generate_content([
-                    {"role": "user", "parts": [system_message + "\n\n" + prompt]}
-                ])
-            else:
-                response = self.model.generate_content(prompt)
+                extra_system = self.load_prompt_from_file(system_prompt_file)
+                system_message += "\n\n" + extra_system
+            response = self.model.generate_content([
+                {"role": "user", "parts": [system_message + "\n\n" + prompt]}
+            ])
             return response.text
         except Exception as e:
             print(f"LLM API 호출 중 오류 발생: {e}")
