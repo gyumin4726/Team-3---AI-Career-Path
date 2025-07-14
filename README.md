@@ -26,27 +26,71 @@
 
 ```
 tennessee_eastman_diploma/
-├── src/
-│   ├── main/              # 메인 파이프라인
-│   │   ├── pipeline.py    # TEP 전체 파이프라인
-│   │   ├── model1_module.py  # Model1 모듈
-│   │   ├── model2_module.py  # Model2 모듈 (KNN 기반)
-│   │   └── model3_module.py  # Model3 모듈
-│   ├── model1/            # Model1 관련 코드
-│   │   ├── convolutional_models.py    # CNN1D2D 모델
-│   │   ├── evaluate_model.py          # 모델 평가
-│   │   └── train_model.py             # 모델 훈련
-│   ├── data/              # 데이터 처리 및 로딩
-│   │   └── dataset.py     # TEP 데이터셋 클래스들
-│   └── LLM/               # LLM 관련 코드
-├── data/                  # 데이터셋 저장소
-│   ├── final_X.npy        # 전처리된 입력 데이터
-│   └── final_Y.npy        # 전처리된 라벨 데이터
-├── model_pretrained/      # 사전 훈련된 모델
-│   └── model1/
+├── app.py
+├── model_pretrained/
+│   ├── model1/
+│   │   ├── 30_epoch_checkpoint.pth
+│   └── model3/
 │       └── 30_epoch_checkpoint.pth
-├── logs/                  # 로그 파일
-└── setup.py               # 프로젝트 설정 파일
+├── README.md
+├── requirements.txt
+├── setup.py
+├── src/
+│   ├── __init__.py
+│   ├── data/
+│   │   ├── __init__.py
+│   │   └── dataset.py
+│   ├── LLM/
+│   │   ├── __init__.py
+│   │   ├── LLM.py
+│   │   └── prompts/
+│   │       ├── base_prompt.txt
+│   │       └── dataset_prompt.txt
+│   ├── main/
+│   │   ├── __init__.py
+│   │   ├── model1_module.py
+│   │   ├── model2_module.py
+│   │   ├── model3_module.py
+│   │   ├── pipeline.py
+│   │   └── pipeline_no_model2.py
+│   ├── model1/
+│   │   ├── __init__.py
+│   │   ├── convolutional_models.py
+│   │   ├── evaluate_model.py
+│   │   ├── recurrent_models.py
+│   │   ├── train_model.py
+│   │   └── utils.py
+│   └── model3/
+│       ├── evaluate_model3.py
+│       ├── model3.py
+│       └── train_model3.py
+├── test_per_fault/
+│   ├── fault_00_X.npy
+│   ├── fault_00_Y.npy
+│   ├── fault_01_X.npy
+│   ├── fault_01_Y.npy
+│   ├── fault_02_X.npy
+│   ├── fault_02_Y.npy
+│   ├── fault_03_X.npy
+│   ├── fault_03_Y.npy
+│   ├── fault_04_X.npy
+│   ├── fault_04_Y.npy
+│   ├── fault_05_X.npy
+│   ├── fault_05_Y.npy
+│   ├── fault_06_X.npy
+│   ├── fault_06_Y.npy
+│   ├── fault_07_X.npy
+│   ├── fault_07_Y.npy
+│   ├── fault_08_X.npy
+│   ├── fault_08_Y.npy
+│   ├── fault_09_X.npy
+│   ├── fault_09_Y.npy
+│   ├── fault_10_X.npy
+│   ├── fault_10_Y.npy
+│   ├── fault_11_X.npy
+│   ├── fault_11_Y.npy
+│   ├── fault_12_X.npy
+│   └── fault_12_Y.npy
 ```
 
 ## 데이터셋 정보
