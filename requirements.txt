@@ -29,3 +29,4 @@ altair>=4.2.0
 # 추가 유틸리티
 tqdm>=4.62.0
 joblib>=1.1.0 
+google-generativeai>=0.3.0
