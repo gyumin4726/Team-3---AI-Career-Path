@@ -251,61 +251,68 @@ def main():
     
     # 메인 컨텐츠
     tab1, tab2, tab3 = st.tabs(["📋 프로젝트 개요", "🔬 파이프라인 분석", "📈 결과 시각화"])
-    
+
     with tab1:
-        st.subheader("프로젝트 개요")
-        
-        # 팀 정보
-        st.markdown("""
-        **팀 정보**
-        - 2025 AI 커리어패스 프로그램 - 팀3
-        - 국민대학교 박규민
-        - 동양미래대학교 방석영
-        - 세종대학교 엄태호
-        - 한양여자대학교 조유영
-        """)
-        
-        # 파이프라인 플로우차트
-        st.subheader("파이프라인 구조")
-        flowchart = create_pipeline_flowchart()
-        st.plotly_chart(flowchart, use_container_width=True)
-        
-        # 주요 특징
-        st.subheader("주요 특징")
-        col1, col2 = st.columns(2)
-        
+        col1, col2, col3 = st.columns(3)
+
         with col1:
-            st.markdown("""
-            **데이터 정보**
-            - 52개 센서 데이터
-            - 21가지 결함 유형
-            - 3분 샘플링 주기
-            - 슬라이딩 윈도우 (50, 10)
-            """)
-        
+            st.markdown('''
+            <div style="background: #f8f9fa; border-radius: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); padding: 36px 20px; min-width: 220px; text-align: center;">
+                <h2 style="font-size: 1.3rem; font-weight: 700; color: #444; margin-bottom: 1rem;">팀 정보</h2>
+                <div style="font-size: 1.08rem; line-height: 2; color: #333; font-weight: 500;">
+                    2025 AI 커리어패스 프로그램 - 팀3<br/>
+                    국민대학교 <b>박규민</b><br/>
+                    동양미래대학교 <b>방석영</b><br/>
+                    세종대학교 <b>엄태호</b><br/>
+                    한양여자대학교 <b>조유영</b>
+                </div>
+            </div>
+            ''', unsafe_allow_html=True)
+
         with col2:
-            st.markdown("""
-            **모델 정보**
-            - Model1: CNN1D2D Discriminator
-            - Model2: KNN 기반 정상화
-            - Model3: TCNSeq2Seq 예측
-            - Model4: Model1 재사용
-            """)
-    
+            st.markdown('''
+            <div style="background: #f8f9fa; border-radius: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); padding: 36px 20px; min-width: 240px; max-width: 340px; margin: 0 auto; text-align: center;">
+                <h2 style="font-size: 1.3rem; font-weight: 700; color: #444; margin-bottom: 1rem;">데이터셋 정보</h2>
+                <ul style="font-size: 1.05rem; line-height: 2; color: #333; font-weight: 500; text-align: left; margin-left: 1.2em;">
+                    <li><b>센서 개수:</b> 52개 (22개 공정, 19개 분석, 11개 조작)</li>
+                    <li><b>결함 유형:</b> 21가지 (정상 포함)</li>
+                    <li><b>샘플링 주기:</b> 3분</li>
+                    <li><b>슬라이딩 윈도우:</b> 960시점 → 윈도우 50, 스텝 10, 총 4600개</li>
+                </ul>
+                <div style="margin-top: 1.1rem; font-size: 0.98rem; color: #555;">
+                    <b>데이터 구조 예시</b><br/>
+                    <code>(B, 50, 52)</code><br/>
+                    <span style="font-size:0.97rem;">B: 배치(런 수), 50: 윈도우, 52: 센서</span>
+                </div>
+            </div>
+            ''', unsafe_allow_html=True)
+
+        with col3:
+            st.markdown('''
+            <div style="background: #f8f9fa; border-radius: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); padding: 36px 20px; min-width: 240px; max-width: 360px; margin: 0 auto; text-align: center;">
+                <h2 style="font-size: 1.3rem; font-weight: 700; color: #444; margin-bottom: 1rem;">파이프라인 원리</h2>
+                <ol style="font-size: 1.05rem; line-height: 2; color: #333; font-weight: 500; text-align: left; margin-left: 1.2em;">
+                    <li><b>Model1:</b> Fault 탐지 + 분류<br/>CNN1D2D로 고장 시점/종류 탐지, 정상시 종료</li>
+                    <li><b>Model2:</b> 조작 변수 정상화<br/>KNN 기반 정상 DB와 비교, 고장 이후만 보정</li>
+                    <li><b>Model3:</b> 반응 변수 예측<br/>TCNSeq2Seq로 정상화된 조작 변수 기반 예측</li>
+                    <li><b>Model4:</b> 정상 여부 재분류<br/>Model1 재사용, 정상화 성공시 종료, 아니면 반복(최대 3회)</li>
+                </ol>
+                <div style="margin-top: 1.1rem; font-size: 0.98rem; color: #555;">
+                    <b>반복 정상화 파이프라인</b><br/>
+                    비정상 상태가 계속되면 최대 3회 반복<br/>
+                    LLM 기반 결과 해설 제공
+                </div>
+            </div>
+            ''', unsafe_allow_html=True)
+
     with tab2:
         st.subheader("파이프라인 분석")
-        
-        # 데이터 로드 섹션
         st.subheader("📊 데이터 로드")
-        
-        # 데이터 선택 옵션을 메인 페이지로 이동
         data_option = st.selectbox(
             "데이터 선택",
             ["샘플 데이터 사용", "파일 업로드", "실제 TEP 데이터"],
             help="분석할 데이터를 선택하세요"
         )
-        
-        # 데이터 로드
         data = None
         if data_option == "샘플 데이터 사용":
             data = load_sample_data()
@@ -328,57 +335,26 @@ def main():
                     st.warning("실제 TEP 데이터 파일을 찾을 수 없습니다.")
             except Exception as e:
                 st.error(f"데이터 로드 오류: {e}")
-        
-        # 데이터 시각화
         if data is not None:
-            st.subheader("입력 데이터 시각화")
-            plot = create_sensor_plot(data, "센서 데이터 (처음 10개 센서)")
-            if plot:
-                st.plotly_chart(plot, use_container_width=True)
-            
-            # 파이프라인 실행 버튼을 메인 페이지에 배치
             st.markdown("---")
             st.subheader("🚀 파이프라인 실행")
-            
-            # 버튼을 중앙에 배치하고 더 눈에 띄게 만들기
             col1, col2, col3 = st.columns([1, 2, 1])
             with col2:
                 run_pipeline = st.button("🚀 파이프라인 실행", type="primary", use_container_width=True)
-            
             if run_pipeline:
                 st.subheader("🔍 파이프라인 실행 중...")
-                
                 with st.spinner("파이프라인을 실행하고 있습니다..."):
-                    # 진행 상황 표시
                     progress_bar = st.progress(0)
                     status_text = st.empty()
-                    
-                    # 각 단계별 진행 상황
-                    steps = ["Model1: Fault 탐지", "Model2: 조작 변수 정상화", 
-                            "Model3: 반응 변수 예측", "Model4: 정상 여부 재분류"]
-                    
+                    steps = ["Model1: Fault 탐지", "Model2: 조작 변수 정상화", "Model3: 반응 변수 예측", "Model4: 정상 여부 재분류"]
                     for i, step in enumerate(steps):
                         status_text.text(f"진행 중: {step}")
                         progress_bar.progress((i + 1) * 25)
-                        time.sleep(0.5)  # 시각적 효과
-                    
-                    # 실제 파이프라인 실행
+                        time.sleep(0.5)
                     results = run_tep_pipeline(data)
-                    
                     progress_bar.progress(100)
                     status_text.text("완료!")
-                    
-                    # 결과 표시
                     display_results(results)
-    
-    with tab3:
-        st.subheader("결과 시각화")
-        
-        if 'results' in locals() and results is not None:
-            # 결과 데이터가 있는 경우 시각화
-            st.info("파이프라인 실행 후 결과를 확인하세요.")
-        else:
-            st.info("파이프라인을 먼저 실행해주세요.")
 
 if __name__ == "__main__":
     main() 
