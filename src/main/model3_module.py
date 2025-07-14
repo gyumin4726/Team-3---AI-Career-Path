@@ -40,7 +40,7 @@ class Model3Module:
         """Model3 (TCNSeq2Seq) 로드 - evaluate_model3.py 기반"""
         try:
             # 사전 학습된 가중치 경로 (evaluate_model3.py와 동일)
-            checkpoint_path = os.path.join(os.path.dirname(__file__), '..', '..', 'model_pretrained', 'model3', '10_epoch_checkpoint.pth')
+            checkpoint_path = os.path.join(os.path.dirname(__file__), '..', '..', 'model_pretrained', 'model3', '30_epoch_checkpoint.pth')
             
             # Model3 생성 및 로드 (evaluate_model3.py와 동일)
             self.model3 = TCNSeq2Seq(x_dim=self.x_dim, m_dim=self.m_dim, c_lat=self.c_lat).to(self.device)
