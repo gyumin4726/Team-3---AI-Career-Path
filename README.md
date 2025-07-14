@@ -46,6 +46,7 @@ Team-3---AI-Career-Path/
 │   │   └── prompts/
 │   │       ├── base_prompt.txt
 │   │       └── dataset_prompt.txt
+│   │       └── fault_list.txt
 │   ├── main/
 │   │   ├── __init__.py
 │   │   ├── model1_module.py
