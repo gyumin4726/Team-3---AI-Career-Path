@@ -1,14 +1,25 @@
-import streamlit as st
-import google.generativeai as genai
 import os
-from typing import Dict, List, Tuple, Any
 
-llm_key = st.secrets["llm"]["api_key"]
+try:
+    import streamlit as st
+    llm_key = st.secrets["llm"]["api_key"]
+except (ImportError, KeyError):
+    llm_key = os.environ.get("LLM_API_KEY", None)
+    if not llm_key:
+        # txt 파일에서 읽기 (fallback)
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        key_path = os.path.join(current_dir, 'MY_KEY.txt')
+        if os.path.exists(key_path):
+            with open(key_path, 'r', encoding='utf-8-sig') as f:
+                llm_key = f.read().strip()
+
+import google.generativeai as genai
+from typing import Dict, List, Tuple, Any
 
 class LLM:
     def __init__(self):
         if not llm_key:
-            raise ValueError("st.secrets['llm']['api_key']에 유효한 키를 넣어주세요.")
+            raise ValueError("LLM API 키가 필요합니다. (st.secrets['llm']['api_key'], 환경변수 LLM_API_KEY, 또는 MY_KEY.txt 중 하나)")
         self.api_key = llm_key
         genai.configure(api_key=self.api_key)
         self.model = genai.GenerativeModel(model_name="gemini-2.0-flash")

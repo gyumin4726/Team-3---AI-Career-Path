@@ -10,14 +10,14 @@
 ## 프로젝트 개요
 
 **4단계 공정 이상 분석 및 정상화 시스템**
-- Model1: Fault 시점 탐지 + Fault 종류 분류 (CNN1D2D Discriminator)
+- Model1: Fault 시점 탐지 + Fault 종류 분류 (LSTM Generator + CNN1D2D Discriminator)
 - Model2: 조작 변수 정상화 (KNN 기반)
 - Model3: 반응 변수 예측 (TCNSeq2Seq)
 - Model4: 정상 여부 재분류 (Model1 재사용)
 
 **주요 특징**
 - 52개 센서 데이터 기반 시계열 분석
-- 21가지 결함 유형 분류 (정상상태 포함)
+- 12가지 결함 유형 분류 (정상상태 포함)
 - 슬라이딩 윈도우 기반 배치 처리 (50, 10)
 - 반복 정상화 파이프라인 (최대 3회)
 - LLM 기반 결과 해설
@@ -53,7 +53,7 @@ tennessee_eastman_diploma/
 
 **Tennessee Eastman Process 데이터**
 - 센서 개수: 52개 (22개 공정 측정값, 19개 분석 측정값, 11개 조작 변수)
-- 결함 유형: 21가지 (정상상태 포함)
+- 결함 유형: 12가지 (정상상태 포함)
 - 샘플링 주기: 3분
 
 **슬라이딩 윈도우 처리**
@@ -143,36 +143,66 @@ python src/main/pipeline.py
 3. 비정상 상태 → Model2, Model3, Model4 실행
 4. Model4 결과에 따라 반복 또는 종료
 
+### 4. Model1 학습 방법
+
+**Model1(GAN 기반 Fault 탐지/분류) 학습**
+
+```bash
+python -m src.model1.train_model
+```
+- 기타 옵션은 `python -m src.model1.train_model --help`로 확인
+
+### 5. Model3 학습 방법
+
+**Model3(TCNSeq2Seq 기반 반응 변수 예측) 학습**
+
+```bash
+python -m src.model3.train_model3
+```
+- 기타 옵션은 `python -m src.model3.train_model3 --help`로 확인
+
 ## Model1 상세 정보
 
-### CNN1D2D Discriminator 구조
-- **1D Convolution**: 시계열 패턴 학습
-- **2D Convolution**: 센서 간 상관관계 학습
-- **Multitask Learning**: 결함 분류 + 실제/가짜 판별
-- **배치 처리**: 슬라이딩 윈도우 기반
+### GAN 구조: LSTM Generator + CNN1D2D Discriminator
+- **LSTM Generator**
+  - 정상/비정상 시계열 데이터를 생성
+  - Discriminator가 더 강력하게 학습될 수 있도록 다양한 시나리오의 데이터를 만듦
+- **CNN1D2D Discriminator**
+  - 입력 시계열이 실제인지(Real/Fake) 판별
+  - 동시에 fault 종류(12가지) 분류
+  - 1D Convolution: 시계열 패턴 학습
+  - 2D Convolution: 센서 간 상관관계 학습
+  - Multitask Learning: 결함 분류 + 실제/가짜 판별
+
+> LSTM Generator와 Discriminator가 경쟁적으로 학습(GAN 구조)하여,  
+> Discriminator가 더 정교하게 fault를 탐지/분류할 수 있도록 Generator가 다양한 데이터를 생성해줍니다.
 
 ## Model2 상세 정보
 
-### KNN 기반 보정
-- **정상 DB 활용**: 유사한 패턴의 정상 데이터로 보정
-- **고장 시점 이후만 보정**: 고장 이전 데이터는 유지
-- **거리 기반 선택**: MSE 거리로 가장 유사한 k개 선택
-- **평균화 보정**: 선택된 k개 시퀀스의 평균으로 보정
-
-### 보정 방법
-- **mean**: k개 시퀀스의 평균 사용
-- **first**: 가장 유사한 1개 시퀀스 사용
+### KNN 기반 조작 변수(m) 정상화
+- **정상 DB 활용**: 유사한 패턴의 정상 데이터로 조작 변수(m, 11개) 보정
+- **고장 시점 이후만 보정**: 고장 이전 데이터는 유지, 이후 구간의 m만 정상화
+- **거리 기반 선택**: MSE 거리로 가장 유사한 k개 정상 시퀀스 선택
+- **평균화 보정**: 선택된 k개 시퀀스의 m값 평균으로 보정
+- **반응 변수(x, 41개)는 이 단계에서 직접 변경하지 않음**
 
 ## Model3 상세 정보
 
-### TCNSeq2Seq 구조
+### TCNSeq2Seq 기반 반응 변수(x) 예측
 - **Temporal Convolutional Network**: 시계열 패턴 학습
 - **Sequence-to-Sequence**: 입력 시퀀스를 출력 시퀀스로 변환
-- **조작 변수 기반**: 정상화된 조작 변수로 반응 변수 예측
+- **보정된 조작 변수(m) 기반**: Model2에서 정상화된 m(11개)을 입력으로 받아, 그에 따라 변화할 반응 변수(x, 41개)를 시계열 예측
+- **고장 시점 이후만 예측**: 고장 이전의 x(반응 변수)는 유지, 이후 구간의 x만 예측하여 업데이트
+- 즉, "정상화된 m이 실제로 적용된다면 x가 어떻게 변할지"를 예측하는 단계
 
 ## 파이프라인 실행 예시
 
 ```bash
 # 전체 파이프라인 테스트
-python src/main/pipeline.py
+python -m src.main.pipeline
+
+# Model2 미포함 파이프라인 테스트 ()
+python -m src.main.pipeline_no_model2
 ```
+- 위 명령어는 Model2(조작 변수 정상화) 단계를 생략하고, Model1 → Model3 → Model4만 실행하는 간소화 버전 파이프라인입니다.
+- 정상화 없이 비정상 데이터를 바로 예측 및 재분류하는 실험/비교용으로 사용할 수 있습니다.
