@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import pandas as pd
 import numpy as np
-import pyreadr as py
+#import pyreadr as py
 from torchvision.transforms.functional import to_tensor, resize
 from random import randint
 import gc

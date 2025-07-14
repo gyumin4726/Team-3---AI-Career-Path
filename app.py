@@ -1,0 +1,384 @@
+import streamlit as st
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+import plotly.express as px
+from plotly.subplots import make_subplots
+import sys
+import os
+from typing import Dict, Any, Optional
+import time
+
+# 프로젝트 경로 추가
+sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+sys.path.append(os.path.join(os.path.dirname(__file__), 'src', 'main'))
+sys.path.append(os.path.join(os.path.dirname(__file__), 'src', 'LLM'))
+sys.path.append(os.path.join(os.path.dirname(__file__), 'src', 'model1'))
+sys.path.append(os.path.join(os.path.dirname(__file__), 'src', 'data'))
+
+# TEP 파이프라인 임포트
+try:
+    from src.main import TEPPipeline
+    from src.data import TEPNPYDataset
+except ImportError as e:
+    st.error(f"모듈 임포트 오류: {e}")
+    st.stop()
+
+# 페이지 설정
+st.set_page_config(
+    page_title="Tennessee Eastman Process - 공정 이상 탐지 및 정상화",
+    page_icon="🏭",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# CSS 스타일
+st.markdown("""
+<style>
+    .main-header {
+        font-size: 2.5rem;
+        color: #1f77b4;
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    .pipeline-step {
+        background-color: #f0f2f6;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        margin: 1rem 0;
+        border-left: 4px solid #1f77b4;
+    }
+    .success-step {
+        border-left-color: #28a745;
+    }
+    .warning-step {
+        border-left-color: #ffc107;
+    }
+    .error-step {
+        border-left-color: #dc3545;
+    }
+    .metric-card {
+        background-color: white;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin: 0.5rem 0;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+def load_sample_data():
+    """샘플 데이터 로드"""
+    try:
+        # 샘플 데이터 생성 (실제 데이터가 없는 경우)
+        np.random.seed(42)
+        # 파이프라인이 기대하는 형태: (92, 50, 52) - 한 시뮬레이션 전체
+        sample_data = np.random.randn(92, 50, 52)  # 92개 배치, 50 시점, 52 센서
+        return sample_data
+    except Exception as e:
+        st.error(f"샘플 데이터 로드 실패: {e}")
+        return None
+
+def create_sensor_plot(data: np.ndarray, title: str = "센서 데이터 시각화"):
+    """센서 데이터 플롯 생성"""
+    if data is None or data.size == 0:
+        return None
+    
+    # 데이터 형태 변환: (B, T, S) → (T, S)
+    if len(data.shape) == 3:
+        data_2d = data.mean(axis=0)  # 배치 평균
+    else:
+        data_2d = data
+    
+    # 센서별로 색상 구분
+    colors = px.colors.qualitative.Set3[:data_2d.shape[1]]
+    
+    fig = go.Figure()
+    
+    for i in range(min(10, data_2d.shape[1])):  # 처음 10개 센서만 표시
+        fig.add_trace(go.Scatter(
+            y=data_2d[:, i],
+            mode='lines',
+            name=f'센서 {i+1}',
+            line=dict(color=colors[i % len(colors)])
+        ))
+    
+    fig.update_layout(
+        title=title,
+        xaxis_title="시점",
+        yaxis_title="센서 값",
+        height=400,
+        showlegend=True
+    )
+    
+    return fig
+
+def create_pipeline_flowchart():
+    """파이프라인 플로우차트 생성"""
+    fig = go.Figure()
+    
+    # 노드 정의
+    nodes = [
+        {'id': 'input', 'x': 0, 'y': 0, 'label': '입력 데이터\n(52개 센서)'},
+        {'id': 'model1', 'x': 2, 'y': 0, 'label': 'Model1\nFault 탐지 + 분류'},
+        {'id': 'normal', 'x': 4, 'y': 1, 'label': '정상 상태\n→ 종료'},
+        {'id': 'model2', 'x': 2, 'y': -1, 'label': 'Model2\n조작 변수 정상화'},
+        {'id': 'model3', 'x': 4, 'y': -1, 'label': 'Model3\n반응 변수 예측'},
+        {'id': 'model4', 'x': 6, 'y': -1, 'label': 'Model4\n정상 여부 재분류'},
+        {'id': 'success', 'x': 8, 'y': 0, 'label': '정상화 완료'},
+        {'id': 'retry', 'x': 6, 'y': -2, 'label': '재시도\n(최대 3회)'}
+    ]
+    
+    # 엣지 정의
+    edges = [
+        ('input', 'model1'),
+        ('model1', 'normal'),
+        ('model1', 'model2'),
+        ('model2', 'model3'),
+        ('model3', 'model4'),
+        ('model4', 'success'),
+        ('model4', 'retry'),
+        ('retry', 'model2')
+    ]
+    
+    # 노드 그리기
+    for node in nodes:
+        fig.add_trace(go.Scatter(
+            x=[node['x']], y=[node['y']],
+            mode='markers+text',
+            marker=dict(size=50, color='lightblue'),
+            text=node['label'].split('\n'),
+            textposition="middle center",
+            showlegend=False,
+            hoverinfo='text'
+        ))
+    
+    # 엣지 그리기
+    for edge in edges:
+        start_node = next(n for n in nodes if n['id'] == edge[0])
+        end_node = next(n for n in nodes if n['id'] == edge[1])
+        
+        fig.add_trace(go.Scatter(
+            x=[start_node['x'], end_node['x']],
+            y=[start_node['y'], end_node['y']],
+            mode='lines',
+            line=dict(color='gray', width=2),
+            showlegend=False,
+            hoverinfo='skip'
+        ))
+    
+    fig.update_layout(
+        title="TEP 4단계 파이프라인 플로우",
+        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        height=500,
+        showlegend=False
+    )
+    
+    return fig
+
+def run_tep_pipeline(data: np.ndarray):
+    """TEP 파이프라인 실행"""
+    try:
+        # 파이프라인 초기화
+        pipeline = TEPPipeline()
+        
+        # 파이프라인 실행
+        results = pipeline.run_full_pipeline(data)
+        
+        return results
+    except Exception as e:
+        st.error(f"파이프라인 실행 오류: {e}")
+        return None
+
+def display_results(results: Dict[str, Any]):
+    """결과 표시"""
+    if results is None:
+        return
+    
+    st.subheader("📊 분석 결과")
+    
+    # 기본 정보
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("결함 유형", results.get('fault_class', 'N/A'))
+    
+    with col2:
+        fault_time = results.get('fault_time', None)
+        if fault_time is not None:
+            st.metric("결함 시점", f"{fault_time} / 960")
+        else:
+            st.metric("결함 시점", "정상")
+    
+    with col3:
+        success = results.get('success', False)
+        status = "✅ 성공" if success else "❌ 실패"
+        st.metric("정상화 상태", status)
+    
+    # 파이프라인 상태
+    pipeline_status = results.get('pipeline_status', 'unknown')
+    if 'normal' in pipeline_status:
+        st.success("🎉 정상 상태로 감지되어 파이프라인이 조기 종료되었습니다.")
+    elif 'normalized' in pipeline_status:
+        iterations = results.get('iterations', 0)
+        st.success(f"🎉 {iterations}회 반복 후 정상화에 성공했습니다!")
+    else:
+        st.warning("⚠️ 최대 반복 횟수 초과로 정상화에 실패했습니다.")
+    
+    # LLM 설명
+    if 'llm_explanations' in results:
+        st.subheader("🤖 AI 분석 설명")
+        
+        explanations = results['llm_explanations']
+        
+        if 'model1' in explanations:
+            with st.expander("Model1 (Fault 탐지 + 분류) 분석"):
+                st.write(explanations['model1'])
+        
+        if 'model2' in explanations:
+            with st.expander("Model2 (조작 변수 정상화) 분석"):
+                st.write(explanations['model2'])
+        
+        if 'model3' in explanations:
+            with st.expander("Model3 (반응 변수 예측) 분석"):
+                st.write(explanations['model3'])
+
+def main():
+    # 메인 헤더
+    st.markdown('<h1 class="main-header">🏭 Tennessee Eastman Process</h1>', unsafe_allow_html=True)
+    st.markdown('<h2 style="text-align: center; color: #666;">공정 이상 탐지 및 정상화 파이프라인</h2>', unsafe_allow_html=True)
+    
+    # 메인 컨텐츠
+    tab1, tab2, tab3 = st.tabs(["📋 프로젝트 개요", "🔬 파이프라인 분석", "📈 결과 시각화"])
+    
+    with tab1:
+        st.subheader("프로젝트 개요")
+        
+        # 팀 정보
+        st.markdown("""
+        **팀 정보**
+        - 2025 AI 커리어패스 프로그램 - 팀3
+        - 국민대학교 박규민
+        - 동양미래대학교 방석영
+        - 세종대학교 엄태호
+        - 한양여자대학교 조유영
+        """)
+        
+        # 파이프라인 플로우차트
+        st.subheader("파이프라인 구조")
+        flowchart = create_pipeline_flowchart()
+        st.plotly_chart(flowchart, use_container_width=True)
+        
+        # 주요 특징
+        st.subheader("주요 특징")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("""
+            **데이터 정보**
+            - 52개 센서 데이터
+            - 21가지 결함 유형
+            - 3분 샘플링 주기
+            - 슬라이딩 윈도우 (50, 10)
+            """)
+        
+        with col2:
+            st.markdown("""
+            **모델 정보**
+            - Model1: CNN1D2D Discriminator
+            - Model2: KNN 기반 정상화
+            - Model3: TCNSeq2Seq 예측
+            - Model4: Model1 재사용
+            """)
+    
+    with tab2:
+        st.subheader("파이프라인 분석")
+        
+        # 데이터 로드 섹션
+        st.subheader("📊 데이터 로드")
+        
+        # 데이터 선택 옵션을 메인 페이지로 이동
+        data_option = st.selectbox(
+            "데이터 선택",
+            ["샘플 데이터 사용", "파일 업로드", "실제 TEP 데이터"],
+            help="분석할 데이터를 선택하세요"
+        )
+        
+        # 데이터 로드
+        data = None
+        if data_option == "샘플 데이터 사용":
+            data = load_sample_data()
+            st.info("샘플 데이터를 사용합니다.")
+        elif data_option == "파일 업로드":
+            uploaded_file = st.file_uploader("NPY 파일 업로드", type=['npy'])
+            if uploaded_file is not None:
+                try:
+                    data = np.load(uploaded_file)
+                    st.success(f"데이터 로드 완료: {data.shape}")
+                except Exception as e:
+                    st.error(f"파일 로드 오류: {e}")
+        elif data_option == "실제 TEP 데이터":
+            try:
+                data_path = "data/final_X.npy"
+                if os.path.exists(data_path):
+                    data = np.load(data_path)
+                    st.success(f"실제 TEP 데이터 로드 완료: {data.shape}")
+                else:
+                    st.warning("실제 TEP 데이터 파일을 찾을 수 없습니다.")
+            except Exception as e:
+                st.error(f"데이터 로드 오류: {e}")
+        
+        # 데이터 시각화
+        if data is not None:
+            st.subheader("입력 데이터 시각화")
+            plot = create_sensor_plot(data, "센서 데이터 (처음 10개 센서)")
+            if plot:
+                st.plotly_chart(plot, use_container_width=True)
+            
+            # 파이프라인 실행 버튼을 메인 페이지에 배치
+            st.markdown("---")
+            st.subheader("🚀 파이프라인 실행")
+            
+            # 버튼을 중앙에 배치하고 더 눈에 띄게 만들기
+            col1, col2, col3 = st.columns([1, 2, 1])
+            with col2:
+                run_pipeline = st.button("🚀 파이프라인 실행", type="primary", use_container_width=True)
+            
+            if run_pipeline:
+                st.subheader("🔍 파이프라인 실행 중...")
+                
+                with st.spinner("파이프라인을 실행하고 있습니다..."):
+                    # 진행 상황 표시
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+                    
+                    # 각 단계별 진행 상황
+                    steps = ["Model1: Fault 탐지", "Model2: 조작 변수 정상화", 
+                            "Model3: 반응 변수 예측", "Model4: 정상 여부 재분류"]
+                    
+                    for i, step in enumerate(steps):
+                        status_text.text(f"진행 중: {step}")
+                        progress_bar.progress((i + 1) * 25)
+                        time.sleep(0.5)  # 시각적 효과
+                    
+                    # 실제 파이프라인 실행
+                    results = run_tep_pipeline(data)
+                    
+                    progress_bar.progress(100)
+                    status_text.text("완료!")
+                    
+                    # 결과 표시
+                    display_results(results)
+    
+    with tab3:
+        st.subheader("결과 시각화")
+        
+        if 'results' in locals() and results is not None:
+            # 결과 데이터가 있는 경우 시각화
+            st.info("파이프라인 실행 후 결과를 확인하세요.")
+        else:
+            st.info("파이프라인을 먼저 실행해주세요.")
+
+if __name__ == "__main__":
+    main() 

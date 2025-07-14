@@ -1,0 +1,31 @@
+# Tennessee Eastman Process (TEP) 프로젝트 - Streamlit 배포용
+# 기본 과학 계산 패키지
+numpy>=1.21.0
+pandas>=1.3.0
+scipy>=1.7.0
+matplotlib>=3.5.0
+scikit-learn>=1.0.0
+
+# PyTorch (CPU 버전 - 호환성 개선)
+torch>=1.13.0
+torchvision>=0.14.0
+torchaudio>=0.13.0
+
+# 기타 필수 패키지
+pyreadr>=0.4.0
+tensorboardx>=2.5.0
+python-dotenv>=0.19.0
+memory-profiler>=0.60.0
+click>=8.0.0
+pillow>=8.3.0
+opencv-python>=4.5.0
+scikit-image>=0.18.0
+
+# Streamlit 및 웹 배포 관련
+streamlit>=1.28.0
+plotly>=5.0.0
+altair>=4.2.0
+
+# 추가 유틸리티
+tqdm>=4.62.0
+joblib>=1.1.0 
