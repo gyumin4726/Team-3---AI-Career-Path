@@ -92,6 +92,54 @@ html, body, [class*="css"]  {
     color: #fff;
     box-shadow: 0 2px 8px rgba(30,80,180,0.13);
 }
+/* 컴팩트 metric 카드 */
+.compact-metric {
+    padding: 0.45rem 0.25rem !important;
+    margin: 0.15rem 0 !important;
+    min-width: 80px;
+    max-width: 120px;
+}
+.compact-metric .metric-title {
+    font-size: 0.85rem !important;
+    margin-bottom: 0.05rem !important;
+}
+.compact-metric .metric-value {
+    font-size: 1.01rem !important;
+}
+/* Expander 타이틀(분석 설명) 더 작고 가운데 정렬 */
+.streamlit-expanderHeader {
+    font-size: 1.01rem !important;
+    text-align: center !important;
+    font-weight: 600 !important;
+    letter-spacing: -0.5px;
+}
+/* 컴팩트 selectbox */
+.compact-select .stSelectbox {
+    max-width: 120px !important;
+    min-width: 80px !important;
+    width: 120px !important;
+    margin: 0 auto !important;
+}
+.compact-select .stSelectbox > div[data-baseweb="select"] {
+    min-height: 28px !important;
+    font-size: 0.93rem !important;
+    padding: 0 4px !important;
+}
+.compact-select .stSelectbox input {
+    min-width: 60px !important;
+    max-width: 100px !important;
+    font-size: 0.93rem !important;
+    padding: 2px 4px !important;
+}
+.compact-select .stSelectbox [data-baseweb="select"] > div {
+    min-height: 28px !important;
+    padding: 0 4px !important;
+}
+/* 결함 시점 카드만 더 크게 */
+.wide-metric {
+    max-width: 190px !important;
+    min-width: 150px !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -223,54 +271,51 @@ def display_results(results: Dict[str, Any]):
     """결과 표시"""
     if results is None:
         return
-    
-    st.subheader("📊 분석 결과")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+    st.markdown('<h3 style="text-align:center; margin-top:1.2rem;">📊 분석 결과</h3>', unsafe_allow_html=True)
+    col1, col2, col3, col4, col5 = st.columns([1,2,3,2,1])
+    with col2:
+        st.markdown('<div class="metric-card compact-metric">', unsafe_allow_html=True)
         st.markdown(f'<div class="metric-title">초기 결함 유형</div><div class="metric-value">{results.get("model1_fault_class", "N/A")}</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
-    with col2:
+    with col3:
         fault_time = results.get('model1_fault_time', None)
+        st.markdown('<div class="metric-card compact-metric wide-metric">', unsafe_allow_html=True)
         if fault_time is not None:
             total_minutes = fault_time * 3
             hours = total_minutes // 60
             minutes = total_minutes % 60
-            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
             st.markdown(f'<div class="metric-title">결함 시점</div><div class="metric-value">{total_minutes}분, {hours}시간 {minutes}분</div>', unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
         else:
-            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
             st.markdown(f'<div class="metric-title">결함 시점</div><div class="metric-value">없음</div>', unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-    with col3:
+        st.markdown('</div>', unsafe_allow_html=True)
+    with col4:
         success = results.get('success', False)
         status = "✅ 성공" if success else "❌ 실패"
-        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+        st.markdown('<div class="metric-card compact-metric">', unsafe_allow_html=True)
         st.markdown(f'<div class="metric-title">정상화 상태</div><div class="metric-value">{status}</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
     # 파이프라인 상태
     pipeline_status = results.get('pipeline_status', 'unknown')
     if pipeline_status == 'early_termination_normal':
-        st.markdown('<div style="color:#219150;font-size:1.15rem;font-weight:700;">🟢 정상 상태로 감지되어 파이프라인이 조기 종료되었습니다.</div>', unsafe_allow_html=True)
+        st.markdown('<div style="color:#219150;font-size:1.15rem;font-weight:700; text-align:center;">🟢 정상 상태로 감지되어 파이프라인이 조기 종료되었습니다.</div>', unsafe_allow_html=True)
     elif 'normalized' in pipeline_status:
         iterations = results.get('iterations', 0)
-        st.markdown(f'<div style="color:#f7b731;font-size:1.15rem;font-weight:700;">🌟 {iterations}회 반복 후 정상화에 성공했습니다!</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="color:#f7b731;font-size:1.15rem;font-weight:700; text-align:center;">🌟 {iterations}회 반복 후 정상화에 성공했습니다!</div>', unsafe_allow_html=True)
     else:
-        st.markdown('<div style="color:#d7263d;font-size:1.15rem;font-weight:700;">🛑 최대 반복 횟수 초과로 정상화에 실패했습니다.</div>', unsafe_allow_html=True)
+        st.markdown('<div style="color:#d7263d;font-size:1.15rem;font-weight:700; text-align:center;">🛑 최대 반복 횟수 초과로 정상화에 실패했습니다.</div>', unsafe_allow_html=True)
     # LLM 설명
     if 'llm_explanations' in results:
-        st.subheader("🤖 AI 분석 설명")
+        st.markdown('<h3 style="text-align:center; margin-top:1.2rem;">🤖 AI 분석 설명</h3>', unsafe_allow_html=True)
         explanations = results['llm_explanations']
         if 'model1' in explanations:
-            with st.expander("Model1 (Fault 탐지 + 분류) 분석"):
+            with st.expander("Model1 (Fault 탐지 + 분류) 분석", expanded=False):
                 st.write(explanations['model1'])
         if 'model2' in explanations:
-            with st.expander("Model2 (조작 변수 정상화) 분석"):
+            with st.expander("Model2 (조작 변수 정상화) 분석", expanded=False):
                 st.write(explanations['model2'])
         if 'model3' in explanations:
-            with st.expander("Model3 (반응 변수 예측) 분석"):
+            with st.expander("Model3 (반응 변수 예측) 분석", expanded=False):
                 st.write(explanations['model3'])
 
 def download_large_file():
@@ -352,8 +397,8 @@ def main():
             ''', unsafe_allow_html=True)
 
     with tab2:
-        st.subheader("파이프라인 분석")
-        st.subheader("📊 데이터 로드")
+        st.markdown('<h2 style="text-align:center; margin-top:1.5rem; margin-bottom:1.2rem;">파이프라인 분석</h2>', unsafe_allow_html=True)
+        st.markdown('<h3 style="text-align:center; margin-top:1.2rem;">📊 데이터 로드</h3>', unsafe_allow_html=True)
         # test_per_fault 폴더의 정상, 0~12 fault 선택지 제공
         fault_options = [
             ("정상", "test_per_fault/fault_00_X.npy")
@@ -361,33 +406,48 @@ def main():
             (f"Fault {i:02d}", f"test_per_fault/fault_{i:02d}_X.npy") for i in range(1, 13)
         ]
         fault_labels = [label for label, _ in fault_options]
-        selected_label = st.selectbox("테스트 데이터 선택 (정상 또는 Fault 0~12)", fault_labels, help="분석할 Fault 데이터를 선택하세요")
+        col1, col2, col3 = st.columns([1,2,1])
+        with col2:
+            st.markdown('<div style="text-align:center; font-size:1.08rem; font-weight:600; margin-bottom:0.5rem;">테스트 데이터 선택 (정상 또는 Fault 0~12)</div>', unsafe_allow_html=True)
+            st.markdown('<div class="compact-select">', unsafe_allow_html=True)
+            selected_label = st.selectbox("", fault_labels, help="분석할 Fault 데이터를 선택하세요")
+            st.markdown('</div>', unsafe_allow_html=True)
         selected_path = dict(fault_options)[selected_label]
         data = None
         try:
             data = np.load(selected_path)
-            st.success(f"{selected_label} 데이터 로드 완료: {data.shape}")
+            st.markdown(
+                f'<div style="text-align:center; font-size:1.13rem; font-weight:600; color:#219150; margin:1rem 0 1.2rem 0;">'
+                f'✅ {selected_label} 시뮬레이션 로드 완료'
+                f'</div>', unsafe_allow_html=True)
         except Exception as e:
             st.error(f"데이터 로드 오류: {e}")
         if data is not None:
             st.markdown("---")
-            st.subheader("🚀 파이프라인 실행")
+            st.markdown('<h3 style="text-align:center; margin-top:1.2rem;">🚀 파이프라인 실행</h3>', unsafe_allow_html=True)
             col1, col2, col3 = st.columns([1, 2, 1])
             with col2:
                 run_pipeline = st.button("🚀 파이프라인 실행", type="primary", use_container_width=True)
             if run_pipeline:
-                st.subheader("🔍 파이프라인 실행 중...")
-                with st.spinner("파이프라인을 실행하고 있습니다..."):
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
-                    steps = ["Model1 - Fault 탐지", "Model2 - 조작 변수 정상화", "Model3 - 반응 변수 예측", "Model4 -정상 여부 재분류"]
-                    for i, step in enumerate(steps):
-                        status_text.text(f"진행 중: {step}")
-                        progress_bar.progress((i + 1) * 25)
-                        time.sleep(1.8)
-                    results = run_tep_pipeline(data)
-                    progress_bar.progress(100)
-                    display_results(results)
+                col_a, col_b, col_c = st.columns([1,2,1])
+                with col_b:
+                    execution_status = st.empty()
+                    execution_status.markdown('<div style="text-align:center; font-size:1.02rem; margin-top:0.7rem; margin-bottom:0.3rem;">🔍 파이프라인 실행 중...</div>', unsafe_allow_html=True)
+                    with st.spinner("파이프라인을 실행하고 있습니다..."):
+                        progress_bar = st.empty()
+                        progress_bar.progress(0)
+                        status_text = st.empty()
+                        steps = ["Model1 - Fault 탐지", "Model2 - 조작 변수 정상화", "Model3 - 반응 변수 예측", "Model4 - 정상 여부 재분류"]
+                        for i, step in enumerate(steps):
+                            status_text.markdown(f"<div style='text-align:center; font-size:0.97rem; margin-bottom:0.1rem;'>{step}</div>", unsafe_allow_html=True)
+                            progress_bar.progress((i + 1) * 25)
+                            time.sleep(1.1)
+                        results = run_tep_pipeline(data)
+                        progress_bar.progress(100)
+                        status_text.markdown("")  # 진행 단계 텍스트 지우기
+                        progress_bar.empty()  # 프로그레스 바 완전히 제거
+                        execution_status.markdown('<div style="text-align:center; font-size:1.02rem; margin-top:0.7rem; margin-bottom:0.3rem;"></div>', unsafe_allow_html=True)
+                        display_results(results)
 
 if __name__ == "__main__":
     main() 
