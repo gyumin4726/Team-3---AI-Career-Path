@@ -25,7 +25,7 @@
 ## 프로젝트 구조
 
 ```
-tennessee_eastman_diploma/
+Team-3---AI-Career-Path/
 ├── app.py
 ├── model_pretrained/
 │   ├── model1/
