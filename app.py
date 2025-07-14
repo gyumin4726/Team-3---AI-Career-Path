@@ -33,38 +33,65 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS 스타일
+# CSS 스타일 (더 세련되고 현대적으로 개선)
 st.markdown("""
 <style>
-    .main-header {
-        font-size: 2.5rem;
-        color: #1f77b4;
-        text-align: center;
-        margin-bottom: 2rem;
-    }
-    .pipeline-step {
-        background-color: #f0f2f6;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        margin: 1rem 0;
-        border-left: 4px solid #1f77b4;
-    }
-    .success-step {
-        border-left-color: #28a745;
-    }
-    .warning-step {
-        border-left-color: #ffc107;
-    }
-    .error-step {
-        border-left-color: #dc3545;
-    }
-    .metric-card {
-        background-color: white;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        margin: 0.5rem 0;
-    }
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap');
+html, body, [class*="css"]  {
+    font-family: 'Noto Sans KR', sans-serif !important;
+}
+.main-header {
+    font-size: 2.8rem;
+    color: #fff;
+    background: linear-gradient(90deg, #1f77b4 0%, #43cea2 100%);
+    text-align: center;
+    margin-bottom: 2rem;
+    padding: 1.2rem 0 1.2rem 0;
+    border-radius: 1.2rem;
+    box-shadow: 0 4px 16px rgba(30,80,180,0.08);
+}
+.metric-card {
+    background: linear-gradient(90deg, #f8fafc 60%, #e0f7fa 100%);
+    padding: 1.2rem 1rem;
+    border-radius: 1rem;
+    box-shadow: 0 2px 8px rgba(30,80,180,0.07);
+    margin: 0.7rem 0;
+    text-align: center;
+}
+.metric-title {
+    font-size: 1.1rem;
+    color: #1f77b4;
+    font-weight: 700;
+    margin-bottom: 0.2rem;
+}
+.metric-value {
+    font-size: 1.7rem;
+    color: #222;
+    font-weight: 700;
+}
+.result-section {
+    margin-top: 2.2rem;
+    margin-bottom: 2.2rem;
+    padding: 1.5rem 1rem;
+    background: #f0f4f8;
+    border-radius: 1.2rem;
+    box-shadow: 0 2px 8px rgba(30,80,180,0.07);
+}
+.stButton > button {
+    background: linear-gradient(90deg, #1f77b4 0%, #43cea2 100%);
+    color: white;
+    font-weight: 700;
+    border-radius: 0.7rem;
+    border: none;
+    padding: 0.7rem 0;
+    font-size: 1.1rem;
+    transition: 0.2s;
+}
+.stButton > button:hover {
+    background: linear-gradient(90deg, #43cea2 0%, #1f77b4 100%);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(30,80,180,0.13);
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -198,52 +225,50 @@ def display_results(results: Dict[str, Any]):
         return
     
     st.subheader("📊 분석 결과")
-    
-    # 기본 정보
     col1, col2, col3 = st.columns(3)
-    
     with col1:
-        st.metric("초기 결함 유형", results.get('model1_fault_class', 'N/A'))
-    
+        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+        st.markdown(f'<div class="metric-title">초기 결함 유형</div><div class="metric-value">{results.get("model1_fault_class", "N/A")}</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
     with col2:
         fault_time = results.get('model1_fault_time', None)
         if fault_time is not None:
             total_minutes = fault_time * 3
             hours = total_minutes // 60
             minutes = total_minutes % 60
-            st.metric("결함 시점", f"{total_minutes}분, {hours}시간 {minutes}분")
+            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+            st.markdown(f'<div class="metric-title">결함 시점</div><div class="metric-value">{total_minutes}분, {hours}시간 {minutes}분</div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
         else:
-            st.metric("결함 시점", "없음")
-    
+            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+            st.markdown(f'<div class="metric-title">결함 시점</div><div class="metric-value">없음</div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
     with col3:
         success = results.get('success', False)
         status = "✅ 성공" if success else "❌ 실패"
-        st.metric("정상화 상태", status)
-    
+        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+        st.markdown(f'<div class="metric-title">정상화 상태</div><div class="metric-value">{status}</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
     # 파이프라인 상태
     pipeline_status = results.get('pipeline_status', 'unknown')
     if pipeline_status == 'early_termination_normal':
-        st.success("🎉 정상 상태로 감지되어 파이프라인이 조기 종료되었습니다.")
+        st.markdown('<div style="color:#219150;font-size:1.15rem;font-weight:700;">🟢 정상 상태로 감지되어 파이프라인이 조기 종료되었습니다.</div>', unsafe_allow_html=True)
     elif 'normalized' in pipeline_status:
         iterations = results.get('iterations', 0)
-        st.success(f"🎉 {iterations}회 반복 후 정상화에 성공했습니다!")
+        st.markdown(f'<div style="color:#f7b731;font-size:1.15rem;font-weight:700;">🌟 {iterations}회 반복 후 정상화에 성공했습니다!</div>', unsafe_allow_html=True)
     else:
-        st.warning("⚠️ 최대 반복 횟수 초과로 정상화에 실패했습니다.")
-    
+        st.markdown('<div style="color:#d7263d;font-size:1.15rem;font-weight:700;">🛑 최대 반복 횟수 초과로 정상화에 실패했습니다.</div>', unsafe_allow_html=True)
     # LLM 설명
     if 'llm_explanations' in results:
         st.subheader("🤖 AI 분석 설명")
-        
         explanations = results['llm_explanations']
-        
         if 'model1' in explanations:
             with st.expander("Model1 (Fault 탐지 + 분류) 분석"):
                 st.write(explanations['model1'])
-        
         if 'model2' in explanations:
             with st.expander("Model2 (조작 변수 정상화) 분석"):
                 st.write(explanations['model2'])
-        
         if 'model3' in explanations:
             with st.expander("Model3 (반응 변수 예측) 분석"):
                 st.write(explanations['model3'])
@@ -275,8 +300,9 @@ def main():
 
         with col1:
             st.markdown('''
-            <div style="background: #f8f9fa; border-radius: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); padding: 36px 20px; min-width: 220px; text-align: center;">
-                <h2 style="font-size: 1.3rem; font-weight: 700; color: #444; margin-bottom: 1rem;">팀 정보</h2>
+            <div style="background: linear-gradient(135deg, #e0f7fa 60%, #b2ebf2 100%); border-radius: 22px; box-shadow: 0 4px 16px rgba(30,80,180,0.10); padding: 38px 22px; min-width: 220px; text-align: center; border: 2px solid #1f77b4;">
+                <div style="font-size:2.2rem; margin-bottom:0.5rem;">👥</div>
+                <h2 style="font-size: 1.35rem; font-weight: 800; color: #1f77b4; margin-bottom: 1rem; letter-spacing:-1px;">팀 정보</h2>
                 <div style="font-size: 1.08rem; line-height: 2; color: #333; font-weight: 500;">
                     2025 AI 커리어패스 프로그램 - 팀3<br/>
                     국민대학교 <b>박규민</b><br/>
@@ -289,11 +315,12 @@ def main():
 
         with col2:
             st.markdown('''
-            <div style="background: #f8f9fa; border-radius: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); padding: 36px 20px; min-width: 240px; max-width: 340px; margin: 0 auto; text-align: center;">
-                <h2 style="font-size: 1.3rem; font-weight: 700; color: #444; margin-bottom: 1rem;">데이터셋 정보</h2>
+            <div style="background: linear-gradient(135deg, #fffde4 60%, #f7e8c3 100%); border-radius: 22px; box-shadow: 0 4px 16px rgba(255,193,7,0.10); padding: 38px 22px; min-width: 240px; max-width: 340px; margin: 0 auto; text-align: center; border: 2px solid #ffc107;">
+                <div style="font-size:2.2rem; margin-bottom:0.5rem;">📊</div>
+                <h2 style="font-size: 1.35rem; font-weight: 800; color: #ffc107; margin-bottom: 1rem; letter-spacing:-1px;">데이터셋 정보</h2>
                 <ul style="font-size: 1.05rem; line-height: 2; color: #333; font-weight: 500; text-align: left; margin-left: 1.2em;">
                     <li><b>센서 개수:</b> 52개 (22개 공정, 19개 분석, 11개 조작)</li>
-                    <li><b>결함 유형:</b> 21가지 (정상 포함)</li>
+                    <li><b>결함 유형:</b> 12가지 (정상 포함)</li>
                     <li><b>샘플링 주기:</b> 3분</li>
                     <li><b>슬라이딩 윈도우:</b> 960시점 → 윈도우 50, 스텝 10, 총 4600개</li>
                 </ul>
@@ -307,8 +334,9 @@ def main():
 
         with col3:
             st.markdown('''
-            <div style="background: #f8f9fa; border-radius: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); padding: 36px 20px; min-width: 240px; max-width: 360px; margin: 0 auto; text-align: center;">
-                <h2 style="font-size: 1.3rem; font-weight: 700; color: #444; margin-bottom: 1rem;">파이프라인 원리</h2>
+            <div style="background: linear-gradient(135deg, #e1f8e6 60%, #b7e7c2 100%); border-radius: 22px; box-shadow: 0 4px 16px rgba(40,167,69,0.10); padding: 38px 22px; min-width: 240px; max-width: 360px; margin: 0 auto; text-align: center; border: 2px solid #28a745;">
+                <div style="font-size:2.2rem; margin-bottom:0.5rem;">🔗</div>
+                <h2 style="font-size: 1.35rem; font-weight: 800; color: #28a745; margin-bottom: 1rem; letter-spacing:-1px;">파이프라인 원리</h2>
                 <ol style="font-size: 1.05rem; line-height: 2; color: #333; font-weight: 500; text-align: left; margin-left: 1.2em;">
                     <li><b>Model1:</b> Fault 탐지 + 분류<br/>CNN1D2D로 고장 시점/종류 탐지, 정상시 종료</li>
                     <li><b>Model2:</b> 조작 변수 정상화<br/>KNN 기반 정상 DB와 비교, 고장 이후만 보정</li>
@@ -352,14 +380,13 @@ def main():
                 with st.spinner("파이프라인을 실행하고 있습니다..."):
                     progress_bar = st.progress(0)
                     status_text = st.empty()
-                    steps = ["Model1: Fault 탐지", "Model2: 조작 변수 정상화", "Model3: 반응 변수 예측", "Model4: 정상 여부 재분류"]
+                    steps = ["Model1 - Fault 탐지", "Model2 - 조작 변수 정상화", "Model3 - 반응 변수 예측", "Model4 -정상 여부 재분류"]
                     for i, step in enumerate(steps):
                         status_text.text(f"진행 중: {step}")
                         progress_bar.progress((i + 1) * 25)
-                        time.sleep(0.5)
+                        time.sleep(1.8)
                     results = run_tep_pipeline(data)
                     progress_bar.progress(100)
-                    status_text.text("완료!")
                     display_results(results)
 
 if __name__ == "__main__":
