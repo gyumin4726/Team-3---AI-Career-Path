@@ -8,6 +8,7 @@ import sys
 import os
 from typing import Dict, Any, Optional
 import time
+import gdown
 
 # 프로젝트 경로 추가
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
@@ -244,7 +245,21 @@ def display_results(results: Dict[str, Any]):
             with st.expander("Model3 (반응 변수 예측) 분석"):
                 st.write(explanations['model3'])
 
+def download_large_file():
+    url = "https://drive.google.com/uc?id=1AsYglG0Jm2Yi316LfjW7P7ThlBzxmghJ"
+    output_path = "data/normal_db.npy"
+    if not os.path.exists(output_path):
+        os.makedirs("data", exist_ok=True)
+        gdown.download(url, output_path, quiet=False)
+        print("✅ Downloaded normal_db.npy")
+    else:
+        print("✅ File already exists")
+
+# 다운로드 수행
+# Streamlit 앱 실행 시 항상 먼저 체크
+
 def main():
+    download_large_file()
     # 메인 헤더
     st.markdown('<h1 class="main-header">🏭 Tennessee Eastman Process</h1>', unsafe_allow_html=True)
     st.markdown('<h2 style="text-align: center; color: #666;">공정 이상 탐지 및 정상화 파이프라인</h2>', unsafe_allow_html=True)
