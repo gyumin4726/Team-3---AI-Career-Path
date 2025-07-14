@@ -203,14 +203,17 @@ def display_results(results: Dict[str, Any]):
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.metric("결함 유형", results.get('fault_class', 'N/A'))
+        st.metric("초기 결함 유형", results.get('model1_fault_class', 'N/A'))
     
     with col2:
-        fault_time = results.get('fault_time', None)
+        fault_time = results.get('model1_fault_time', None)
         if fault_time is not None:
-            st.metric("결함 시점", f"{fault_time} / 960")
+            total_minutes = fault_time * 3
+            hours = total_minutes // 60
+            minutes = total_minutes % 60
+            st.metric("결함 시점", f"{total_minutes}분, {hours}시간 {minutes}분")
         else:
-            st.metric("결함 시점", "정상")
+            st.metric("결함 시점", "없음")
     
     with col3:
         success = results.get('success', False)
@@ -219,7 +222,7 @@ def display_results(results: Dict[str, Any]):
     
     # 파이프라인 상태
     pipeline_status = results.get('pipeline_status', 'unknown')
-    if 'normal' in pipeline_status:
+    if pipeline_status == 'early_termination_normal':
         st.success("🎉 정상 상태로 감지되어 파이프라인이 조기 종료되었습니다.")
     elif 'normalized' in pipeline_status:
         iterations = results.get('iterations', 0)

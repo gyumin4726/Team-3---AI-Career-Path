@@ -77,6 +77,8 @@ class TEPPipeline:
         model1_results = self.model1_module.detect_fault(data_sequence)
         fault_time = model1_results.get('fault_time')
         fault_class = model1_results.get('fault_class')
+        model1_original_fault_time = model1_results.get('original_fault_time')  # 원본 시점
+        model1_fault_class = model1_results.get('fault_class')  # 최초 결함 유형
         
         # Model1 결과에 따른 분기 처리
         if fault_class == "정상":
@@ -98,7 +100,10 @@ class TEPPipeline:
                 'pipeline_status': 'early_termination_normal',
                 'llm_explanations': {
                     'model1': model1_explanation
-                }
+                },
+                'model1_fault_time': model1_original_fault_time,  # 모델1의 원본 결함 시점
+                'model1_fault_class': model1_fault_class,         # 최초 결함 유형
+                'final_fault_class': fault_class                  # 정상화 후 결함 유형(여기선 동일)
             }
             print("="*60)
             print("파이프라인 완료 (정상 상태)")
@@ -181,7 +186,10 @@ class TEPPipeline:
                         'model1': model1_explanation,
                         'model2': model2_explanation,
                         'model3': model3_explanation
-                    }
+                    },
+                    'model1_fault_time': model1_original_fault_time,  # 모델1의 원본 결함 시점
+                    'model1_fault_class': model1_fault_class,         # 최초 결함 유형
+                    'final_fault_class': final_class                  # 정상화 후 결함 유형
                 }
                 print("="*60)
                 print(f"파이프라인 완료! (반복 {current_iteration}회 후 정상화 성공)")
@@ -224,7 +232,10 @@ class TEPPipeline:
                 'model1': model1_explanation,
                 'model2': model2_explanation,
                 'model3': model3_explanation
-            }
+            },
+            'model1_fault_time': model1_original_fault_time,  # 모델1의 원본 결함 시점
+            'model1_fault_class': model1_fault_class,         # 최초 결함 유형
+            'final_fault_class': final_class                  # 정상화 후 결함 유형
         }
         
         print("="*60)
