@@ -120,7 +120,7 @@ tennessee_eastman_diploma/
 - **LSTM GENERATOR + CNN1D2D Discriminator** 사용
 - 슬라이딩 윈도우 기반 배치 처리
 - Fault 시점 탐지 (0~4599 → 0~959 변환)
-- Fault 종류 분류 (21가지)
+- Fault 종류 분류 (12가지)
 - 정상 상태 감지 시 파이프라인 조기 종료
 
 ### 2단계: Model2 (조작 변수 정상화)
