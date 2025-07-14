@@ -72,7 +72,7 @@ def load_sample_data():
     """샘플 데이터 로드"""
     try:
         # 샘플 데이터 생성 (실제 데이터가 없는 경우)
-        np.random.seed(42)
+        np.random.seed(30)
         # 파이프라인이 기대하는 형태: (92, 50, 52) - 한 시뮬레이션 전체
         sample_data = np.random.randn(92, 50, 52)  # 92개 배치, 50 시점, 52 센서
         return sample_data
@@ -323,33 +323,21 @@ def main():
     with tab2:
         st.subheader("파이프라인 분석")
         st.subheader("📊 데이터 로드")
-        data_option = st.selectbox(
-            "데이터 선택",
-            ["샘플 데이터 사용", "파일 업로드", "실제 TEP 데이터"],
-            help="분석할 데이터를 선택하세요"
-        )
+        # test_per_fault 폴더의 정상, 0~12 fault 선택지 제공
+        fault_options = [
+            ("정상", "test_per_fault/fault_00_X.npy")
+        ] + [
+            (f"Fault {i:02d}", f"test_per_fault/fault_{i:02d}_X.npy") for i in range(1, 13)
+        ]
+        fault_labels = [label for label, _ in fault_options]
+        selected_label = st.selectbox("테스트 데이터 선택 (정상 또는 Fault 0~12)", fault_labels, help="분석할 Fault 데이터를 선택하세요")
+        selected_path = dict(fault_options)[selected_label]
         data = None
-        if data_option == "샘플 데이터 사용":
-            data = load_sample_data()
-            st.info("샘플 데이터를 사용합니다.")
-        elif data_option == "파일 업로드":
-            uploaded_file = st.file_uploader("NPY 파일 업로드", type=['npy'])
-            if uploaded_file is not None:
-                try:
-                    data = np.load(uploaded_file)
-                    st.success(f"데이터 로드 완료: {data.shape}")
-                except Exception as e:
-                    st.error(f"파일 로드 오류: {e}")
-        elif data_option == "실제 TEP 데이터":
-            try:
-                data_path = "data/final_X.npy"
-                if os.path.exists(data_path):
-                    data = np.load(data_path)
-                    st.success(f"실제 TEP 데이터 로드 완료: {data.shape}")
-                else:
-                    st.warning("실제 TEP 데이터 파일을 찾을 수 없습니다.")
-            except Exception as e:
-                st.error(f"데이터 로드 오류: {e}")
+        try:
+            data = np.load(selected_path)
+            st.success(f"{selected_label} 데이터 로드 완료: {data.shape}")
+        except Exception as e:
+            st.error(f"데이터 로드 오류: {e}")
         if data is not None:
             st.markdown("---")
             st.subheader("🚀 파이프라인 실행")
