@@ -122,7 +122,7 @@ class TEPPipeline:
                 model2_results = self.model2_module.normalize_after_fault(
                     model1_output=data_sequence,
                     fault_time=fault_time,
-                    k=3,
+                    k=5,
                     method='mean',
                     data_path=self.data_path
                 )
