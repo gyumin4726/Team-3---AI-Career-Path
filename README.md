@@ -104,7 +104,7 @@ tennessee_eastman_diploma/
 - 원본 데이터: 0~959 시점 (960개)
 - 윈도우 크기: 50
 - 스텝 크기: 10
-- 확장된 데이터: 0~4599 시점 (4600개 윈도우)
+- 확장된 데이터: 0~4599 시점 (92개 윈도우)
 
 **데이터 구조**
 ```python
@@ -119,15 +119,13 @@ tennessee_eastman_diploma/
 ### 1단계: Model1 (Fault 탐지 + 분류)
 - **LSTM GENERATOR + CNN1D2D Discriminator** 사용
 - 슬라이딩 윈도우 기반 배치 처리
-- Fault 시점 탐지 (0~4599 → 0~959 변환)
+- Fault 시점 탐지
 - Fault 종류 분류 (12가지)
-- 정상 상태 감지 시 파이프라인 조기 종료
 
 ### 2단계: Model2 (조작 변수 정상화)
 - **KNN 기반 보정** 사용
 - 고장 시점 이후 구간만 정상화
 - 정상 DB와 유사한 패턴으로 보정
-- 반응 변수 (41개)와 조작 변수 (11개) 분리
 
 ### 3단계: Model3 (반응 변수 예측)
 - **TCNSeq2Seq** 사용
@@ -234,7 +232,7 @@ python -m src.model3.train_model3
 # 전체 파이프라인 테스트
 python -m src.main.pipeline
 
-# Model2 미포함 파이프라인 테스트 ()
+# Model2 미포함 파이프라인 테스트
 python -m src.main.pipeline_no_model2
 ```
 - 위 명령어는 Model2(조작 변수 정상화) 단계를 생략하고, Model1 → Model3 → Model4만 실행하는 간소화 버전 파이프라인입니다.
