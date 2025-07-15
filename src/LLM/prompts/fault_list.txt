@@ -1,8 +1,8 @@
-# Tennessee Eastman Process (TEP) 결함 목록 (자연어 설명)
+Tennessee Eastman Process (TEP) 결함 목록 (자연어 설명)
 
-# 결함 유형 설명:
-# - Step: 갑작스럽게 값이 변하는 이상 (예: 한 순간에 값이 확 바뀜)
-# - Random Variation: 점진적이고 누적적으로 값이 변하는 이상 (예: 서서히, 불규칙하게 변화)
+결함 유형 설명:
+- Step: 갑작스럽게 값이 변하는 이상 (예: 한 순간에 값이 확 바뀜)
+- Random Variation: 점진적이고 누적적으로 값이 변하는 이상 (예: 서서히, 불규칙하게 변화)
 
 1. Fault 1: A/C feed ratio, B composition constant (유형: Step)
 2. Fault 2: B composition, A/C ratio constant (유형: Step)
@@ -17,4 +17,4 @@
 11. Fault 11: Reactor cooling water inlet temperature (유형: Random Variation)
 12. Fault 12: Condenser cooling water inlet temperature (유형: Random Variation)
 
-# 이 리스트는 LLM이 각 결함의 의미와 변화를 쉽게 이해할 수 있도록 작성되었습니다. 
+이 리스트는 LLM이 각 결함의 의미와 변화를 쉽게 이해할 수 있도록 작성되었습니다. 

@@ -45,8 +45,17 @@ class LLM:
             if system_prompt_file:
                 extra_system = self.load_prompt_from_file(system_prompt_file)
                 system_message += "\n\n" + extra_system
+            full_prompt = system_message + "\n\n" + prompt
+            try:
+                import streamlit as st
+                st.write('---')
+                st.write('**[LLM 디버그] 실제 전달 프롬프트:**')
+                st.write(full_prompt)
+                st.write('---')
+            except Exception:
+                pass
             response = self.model.generate_content([
-                {"role": "user", "parts": [system_message + "\n\n" + prompt]}
+                {"role": "user", "parts": [full_prompt]}
             ])
             return response.text
         except Exception as e:
