@@ -397,7 +397,7 @@ def main():
                         for i, step in enumerate(steps):
                             status_text.markdown(f"<div style='text-align:center; font-size:0.97rem; margin-bottom:0.1rem;'>{step}</div>", unsafe_allow_html=True)
                             progress_bar.progress((i + 1) * 25)
-                            time.sleep(1.1)
+                            time.sleep(2.0)
                         results, pipeline = run_tep_pipeline(data)  # pipeline 객체도 받음
                         progress_bar.progress(100)
                         status_text.markdown("")  # 진행 단계 텍스트 지우기
@@ -412,7 +412,13 @@ def main():
                             model2_llm_result = pipeline.model2_module.get_results_for_llm(
                                 pipeline.original_input_data, pipeline.first_fault_time)
                             st.session_state['model2_top3_indices'] = model2_llm_result.get('top3_indices', [41, 42, 43])
-                            st.session_state['model2_top3_stats'] = model2_llm_result.get('stats', {})
+                            st.session_state['model2_top3_stats'] = model2_llm_result.get('top3_stats', {})
+                        # Model3 Top3 인덱스/통계도 저장 (정상화가 반영된 pipeline 사용)
+                        if results is not None and results.get('predicted_x') is not None and pipeline is not None:
+                            model3_llm_result = pipeline.model3_module.get_results_for_llm(
+                                pipeline.original_input_data, pipeline.first_fault_time)
+                            st.session_state['model3_top3_indices'] = model3_llm_result.get('top3_indices', [0, 1, 2])
+                            st.session_state['model3_top3_stats'] = model3_llm_result.get('top3_stats', {})
                     
     with tab3:
         # --- 파이프라인 실행 결과 기반 Model2 Top3 조작 변수 변화 시각화 ---
@@ -422,19 +428,17 @@ def main():
             # 아래에서 Top3 인덱스/통계는 세션에 저장된 값을 사용
             top3_indices = st.session_state.get('model2_top3_indices', [41, 42, 43])
             top3_stats = st.session_state.get('model2_top3_stats', {})
+            top3_indices_m3 = st.session_state.get('model3_top3_indices', [0, 1, 2])
+            top3_stats_m3 = st.session_state.get('model3_top3_stats', {})
             if results.get('normalized_m') is not None and input_data is not None:
                 fault_time = results.get('model1_fault_time', None)
                 st.markdown('<h3 style="text-align:center; margin-top:1.2rem;">Model2 정상화 전후 Top3 조작 변수 변화</h3>', unsafe_allow_html=True)
-
-                # 세션 상태에 현재 인덱스 저장
+                # --- Model2 캐러셀 ---
                 if 'current_plot_idx' not in st.session_state:
                     st.session_state['current_plot_idx'] = 0
                 idx = st.session_state['current_plot_idx']
-                # 인덱스 범위 제한
                 idx = max(0, min(idx, 2))
                 st.session_state['current_plot_idx'] = idx
-
-                # 단일 subplot만 그리기
                 def plot_single_m_change(original_data, normalized_m, m_index, fault_time, height=600):
                     m_names = {
                         41: "m1: D 피드 유량 밸브",
@@ -450,9 +454,10 @@ def main():
                         51: "m11: 응축기 냉각수 유량 밸브"
                     }
                     B, T, S = original_data.shape
-                    orig_m = original_data[:, :, 41:]  # (B, 50, 11)
+                    orig_m = original_data[:, :, 41:]
+                    norm_m = normalized_m
                     orig_m_2d = orig_m.reshape(B * T, 11)
-                    norm_m_2d = normalized_m.reshape(B * T, 11)
+                    norm_m_2d = norm_m.reshape(B * T, 11)
                     m_idx = m_index - 41
                     m_name = m_names.get(m_index, f"조작 변수 {m_index}")
                     colors = px.colors.qualitative.Set1
@@ -475,7 +480,6 @@ def main():
                         legendgroup='norm',
                         showlegend=True
                     ))
-                    # fault_time은 이미 슬라이딩 윈도우 인덱스이므로 변환 없이 바로 사용
                     if fault_time is not None and isinstance(fault_time, (int, float)):
                         fault_time = original_time_to_window_index(fault_time, 50, 10)
                         fig.add_vline(x=int(fault_time), line_width=2, line_dash="dash", line_color="blue",
@@ -488,8 +492,6 @@ def main():
                         title=m_name
                     )
                     return fig
-
-                # 캐러셀 스타일 시각화 UI
                 st.markdown("""
                 <style>
                 .carousel-btn {
@@ -534,10 +536,9 @@ def main():
                 </style>
                 """, unsafe_allow_html=True)
                 st.markdown('<div class="carousel-outer">', unsafe_allow_html=True)
-                # 좌측 float 버튼
                 col_btn_left, col_graph, col_btn_right = st.columns([1,8,1])
                 with col_btn_left:
-                    st.markdown('<div style="height: 260px;"></div>', unsafe_allow_html=True)  # 버튼 세로 정렬용
+                    st.markdown('<div style="height: 260px;"></div>', unsafe_allow_html=True)
                     if st.button('❮', key='carousel_prev', help='이전', disabled=(idx==0)):
                         st.session_state['current_plot_idx'] = max(0, idx-1)
                 with col_btn_right:
@@ -547,7 +548,6 @@ def main():
                 with col_graph:
                     st.plotly_chart(plot_single_m_change(input_data, results['normalized_m'], top3_indices[idx], fault_time, height=600), use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
-                # 동그란 네비게이터
                 nav_html = '<div style="text-align:center; margin-top: 0.5rem;">'
                 for i in range(3):
                     active = 'active' if i == idx else ''
@@ -557,6 +557,84 @@ def main():
                 # Top3 통계도 아래에 출력 (원하면)
                 st.write('Model2 Top3 indices:', top3_indices)
                 st.write('Model2 mean_delta:', top3_stats)
+                st.write('Model3 Top3 indices:', top3_indices_m3)
+                st.write('Model3 mean_delta:', top3_stats_m3)
+
+                # --- Model3 캐러셀 ---
+                st.markdown('<h3 style="text-align:center; margin-top:2.5rem;">Model3 예측 전후 Top3 반응 변수 변화</h3>', unsafe_allow_html=True)
+                if 'current_plot_idx_m3' not in st.session_state:
+                    st.session_state['current_plot_idx_m3'] = 0
+                idx_m3 = st.session_state['current_plot_idx_m3']
+                idx_m3 = max(0, min(idx_m3, 2))
+                st.session_state['current_plot_idx_m3'] = idx_m3
+                def plot_single_x_change(original_data, predicted_x, x_index, fault_time, height=600):
+                    x_names = {i: f"X{i+1}" for i in range(41)}
+                    B, T, S = original_data.shape
+                    orig_x = original_data[:, :, :41]
+                    pred_x = predicted_x[:, :, :41]
+                    orig_x_2d = orig_x.reshape(B * T, 41)
+                    pred_x_2d = pred_x.reshape(B * T, 41)
+                    x_name = x_names.get(x_index, f"반응 변수 {x_index}")
+                    colors = px.colors.qualitative.Set2
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(
+                        x=list(range(orig_x_2d.shape[0])),
+                        y=orig_x_2d[:, x_index],
+                        mode='lines',
+                        name=f'원본 {x_name}',
+                        line=dict(color=colors[0]),
+                        legendgroup='orig',
+                        showlegend=True
+                    ))
+                    fig.add_trace(go.Scatter(
+                        x=list(range(pred_x_2d.shape[0])),
+                        y=pred_x_2d[:, x_index],
+                        mode='lines',
+                        name=f'예측 {x_name}',
+                        line=dict(color=colors[1]),
+                        legendgroup='pred',
+                        showlegend=True
+                    ))
+                    if fault_time is not None and isinstance(fault_time, (int, float)):
+                        fault_time = original_time_to_window_index(fault_time, 50, 10)
+                        fig.add_vline(x=int(fault_time), line_width=2, line_dash="dash", line_color="blue",
+                                      annotation_text="이상 발생 시점", annotation_position="top right")
+                    fig.update_layout(
+                        height=height,
+                        xaxis_title="슬라이딩 윈도우 시점 (0~4599)",
+                        yaxis_title="반응 변수 값",
+                        showlegend=True,
+                        title=x_name
+                    )
+                    return fig
+                st.markdown('<div class="carousel-outer">', unsafe_allow_html=True)
+                col_btn_left_m3, col_graph_m3, col_btn_right_m3 = st.columns([1,8,1])
+                with col_btn_left_m3:
+                    st.markdown('<div style="height: 260px;"></div>', unsafe_allow_html=True)
+                    if st.button('❮', key='carousel_prev_m3', help='이전', disabled=(idx_m3==0)):
+                        st.session_state['current_plot_idx_m3'] = max(0, idx_m3-1)
+                with col_btn_right_m3:
+                    st.markdown('<div style="height: 260px;"></div>', unsafe_allow_html=True)
+                    if st.button('❯', key='carousel_next_m3', help='다음', disabled=(idx_m3==2)):
+                        st.session_state['current_plot_idx_m3'] = min(2, idx_m3+1)
+                with col_graph_m3:
+                    st.plotly_chart(
+                        plot_single_x_change(
+                            input_data,
+                            results['predicted_x'],
+                            top3_indices_m3[idx_m3],
+                            fault_time,
+                            height=600
+                        ),
+                        use_container_width=True
+                    )
+                st.markdown('</div>', unsafe_allow_html=True)
+                nav_html_m3 = '<div style="text-align:center; margin-top: 0.5rem;">'
+                for i in range(3):
+                    active = 'active' if i == idx_m3 else ''
+                    nav_html_m3 += f'<span class="carousel-dot {active}"></span>'
+                nav_html_m3 += '</div>'
+                st.markdown(nav_html_m3, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main() 

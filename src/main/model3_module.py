@@ -228,6 +228,7 @@ class Model3Module:
                 'delta_max': float(np.max(np.abs(after_pred - after_orig))) if after_pred.size > 0 else None,
                 'delta_min': float(np.min(np.abs(after_pred - after_orig))) if after_pred.size > 0 else None
             }
+        # 디버깅용 출력 제거
         return {
             'top3_indices': top3_indices,
             'stats': stats
@@ -261,6 +262,11 @@ class Model3Module:
         summary_data = self.summarize_top3_x_changes(predicted_sequence, original_sequence, fault_time)
         top3_indices = summary_data['top3_indices']
         stats = summary_data['stats']
+
+        # 디버깅용 출력 제거
+        # import streamlit as st
+        # st.write('[Model3][get_results_for_llm] Top3 indices:', top3_indices)
+        # st.write('[Model3][get_results_for_llm] Top3 stats:', stats)
 
         # 간단한 요약 설명 생성
         summary_lines = [

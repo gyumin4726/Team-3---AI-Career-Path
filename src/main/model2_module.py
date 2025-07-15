@@ -264,10 +264,10 @@ class Model2Module:
             'original_sequence': self.first_original_sequence  # 항상 최초 입력으로 저장
         }
 
-        # 정상화 직후 mean_delta 출력
-        summary_data = self.summarize_top3_m_changes(self.results['normalized_sequence'], model1_output, fault_time)
-        import streamlit as st
-        st.write('[normalize_after_fault] mean_delta:', summary_data.get('mean_delta', '없음'))
+        # 정상화 직후 mean_delta 출력 (디버깅용 로그 삭제)
+        # summary_data = self.summarize_top3_m_changes(self.results['normalized_sequence'], model1_output, fault_time)
+        # import streamlit as st
+        # st.write('[normalize_after_fault] mean_delta:', summary_data.get('mean_delta', '없음'))
 
         reconstructed_all = corrected_data
         x_part_np = reconstructed_all[:, :, :41]  # (N, T, 41)
@@ -418,8 +418,6 @@ class Model2Module:
         # 모든 시뮬레이션의 변화량을 평균
         if all_deltas:
             mean_delta = np.mean(all_deltas, axis=0)  # (11,)
-            import streamlit as st
-            st.write('조작변수별 정상화 전후 변화량(mean_delta):', mean_delta)
             top3_indices = np.argsort(mean_delta)[-3:][::-1].tolist()
             top3_indices = [idx + 41 for idx in top3_indices]  # 실제 변수 인덱스로 변환
             
@@ -480,10 +478,10 @@ class Model2Module:
             )
         summary = '\n'.join(summary_lines)
 
-        # 정상화 직후 mean_delta 출력
-        summary_data = self.summarize_top3_m_changes(normalized_sequence, original_input, fault_time)
-        import streamlit as st
-        st.write('[get_results_for_llm] mean_delta:', summary_data.get('mean_delta', '없음'))
+        # 정상화 직후 mean_delta 출력 (디버깅용 로그 삭제)
+        # summary_data = self.summarize_top3_m_changes(normalized_sequence, original_input, fault_time)
+        # import streamlit as st
+        # st.write('[get_results_for_llm] mean_delta:', summary_data.get('mean_delta', '없음'))
 
         return {
             'top3_indices': top3_indices,
