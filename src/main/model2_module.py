@@ -25,6 +25,7 @@ class Model2Module:
             self.T = None
             self.M = 11  # 조작 변수 차원 (11)
         self.results = {}  # 내부 결과 저장용
+        self.first_original_sequence = None # 최초 입력 데이터를 저장할 변수
 
     @staticmethod
     def build_normal_db(data_path: str, sample_size: int = 5000, random_seed: int = 42) -> np.ndarray:
@@ -121,17 +122,17 @@ class Model2Module:
                               fault_time: int,
                               k: int = 3,
                               method: str = 'mean',
-                              data_path: str = None) -> Dict[str, np.ndarray]:
+                              data_path: str = None,
+                              original_input_data: np.ndarray = None) -> Dict[str, np.ndarray]:
         """
         Model1 출력을 받아 고장 이후 구간의 조작 변수(M)만 보정 (Model3과 동일한 fault_time 처리)
-
         Args:
             model1_output: (N, T, D) - Model1 출력 (원본과 동일)
             fault_time: 고장 시점 인덱스 (슬라이딩 윈도우 인덱스)
             k: 최근접 이웃 개수
             method: 'mean' 또는 'first'
             data_path: 정상 DB가 없을 때 사용할 데이터 경로
-
+            original_input_data: 파이프라인 최초 입력 데이터 (항상 변화량 기준)
         Returns:
             {
                 'reconstructed_all': (N, T, D),
@@ -141,6 +142,12 @@ class Model2Module:
         """
         N, T, D = model1_output.shape
         assert D == 52, "전체 시퀀스는 52차원 (반응 + 조작 변수) 이어야 합니다."
+
+        # 최초 입력 저장 (항상 명시적으로 전달된 original_input_data로)
+        if original_input_data is not None:
+            self.first_original_sequence = original_input_data.copy()
+        elif self.first_original_sequence is None:
+            self.first_original_sequence = model1_output.copy()
 
         # 정상 DB가 없으면 자동으로 구축
         if self.normal_m_db is None:
@@ -253,8 +260,14 @@ class Model2Module:
             'normalized': True,
             'normalized_m_only': True,
             'delta_summary': delta_summary,
-            'normalized_sequence': corrected_data  # LLM용 결과 저장
+            'normalized_sequence': corrected_data,  # LLM용 결과 저장
+            'original_sequence': self.first_original_sequence  # 항상 최초 입력으로 저장
         }
+
+        # 정상화 직후 mean_delta 출력
+        summary_data = self.summarize_top3_m_changes(self.results['normalized_sequence'], model1_output, fault_time)
+        import streamlit as st
+        st.write('[normalize_after_fault] mean_delta:', summary_data.get('mean_delta', '없음'))
 
         reconstructed_all = corrected_data
         x_part_np = reconstructed_all[:, :, :41]  # (N, T, 41)
@@ -405,6 +418,8 @@ class Model2Module:
         # 모든 시뮬레이션의 변화량을 평균
         if all_deltas:
             mean_delta = np.mean(all_deltas, axis=0)  # (11,)
+            import streamlit as st
+            st.write('조작변수별 정상화 전후 변화량(mean_delta):', mean_delta)
             top3_indices = np.argsort(mean_delta)[-3:][::-1].tolist()
             top3_indices = [idx + 41 for idx in top3_indices]  # 실제 변수 인덱스로 변환
             
@@ -430,14 +445,15 @@ class Model2Module:
             
         return {
             'top3_indices': top3_indices,
-            'stats': stats
+            'stats': stats,
+            'mean_delta': mean_delta if all_deltas else None
         }
 
     def get_results_for_llm(self, original_sequence: np.ndarray, fault_time: int) -> dict:
         """
         LLM에게 전달할 Model2 요약 결과 반환
         Args:
-            original_sequence: (B, 50, 52) - 원본 입력 데이터
+            original_sequence: (B, 50, 52) - 원본 입력 데이터 (이제 무시)
             fault_time: 슬라이딩 윈도우 인덱스 기준 fault 시점
         Returns:
             {
@@ -446,9 +462,10 @@ class Model2Module:
                 'summary': str
             }
         """
-        # 정상화된 데이터는 self.results에서 가져오기
+        # 항상 최초 입력과 정상화 결과를 비교
         normalized_sequence = self.results.get('normalized_sequence', original_sequence)
-        summary_data = self.summarize_top3_m_changes(normalized_sequence, original_sequence, fault_time)
+        original_input = self.results.get('original_sequence', original_sequence)
+        summary_data = self.summarize_top3_m_changes(normalized_sequence, original_input, fault_time)
         top3_indices = summary_data['top3_indices']
         stats = summary_data['stats']
 
@@ -462,6 +479,11 @@ class Model2Module:
                 f"  - 변수 {idx}: fault 이전 평균={s['before_mean']:.3f}, fault 이후 정상화 평균={s['after_mean']:.3f}, 변화량 평균={s['delta_mean']:.3f}, 변화량 최대={s['delta_max']:.3f}"
             )
         summary = '\n'.join(summary_lines)
+
+        # 정상화 직후 mean_delta 출력
+        summary_data = self.summarize_top3_m_changes(normalized_sequence, original_input, fault_time)
+        import streamlit as st
+        st.write('[get_results_for_llm] mean_delta:', summary_data.get('mean_delta', '없음'))
 
         return {
             'top3_indices': top3_indices,

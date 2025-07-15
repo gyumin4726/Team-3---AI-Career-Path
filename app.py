@@ -149,129 +149,17 @@ def original_time_to_window_index(original_time, window_size, step_size):
     window_index = window_num * window_size + timestep_in_window
     return window_index
 
-def load_sample_data():
-    """샘플 데이터 로드"""
-    try:
-        # 샘플 데이터 생성 (실제 데이터가 없는 경우)
-        np.random.seed(30)
-        # 파이프라인이 기대하는 형태: (92, 50, 52) - 한 시뮬레이션 전체
-        sample_data = np.random.randn(92, 50, 52)  # 92개 배치, 50 시점, 52 센서
-        return sample_data
-    except Exception as e:
-        st.error(f"샘플 데이터 로드 실패: {e}")
-        return None
-
-def create_sensor_plot(data: np.ndarray, title: str = "센서 데이터 시각화"):
-    """센서 데이터 플롯 생성"""
-    if data is None or data.size == 0:
-        return None
-    
-    # 데이터 형태 변환: (B, T, S) → (T, S)
-    if len(data.shape) == 3:
-        data_2d = data.mean(axis=0)  # 배치 평균
-    else:
-        data_2d = data
-    
-    # 센서별로 색상 구분
-    colors = px.colors.qualitative.Set3[:data_2d.shape[1]]
-    
-    fig = go.Figure()
-    
-    for i in range(min(10, data_2d.shape[1])):  # 처음 10개 센서만 표시
-        fig.add_trace(go.Scatter(
-            y=data_2d[:, i],
-            mode='lines',
-            name=f'센서 {i+1}',
-            line=dict(color=colors[i % len(colors)])
-        ))
-    
-    fig.update_layout(
-        title=title,
-        xaxis_title="시점",
-        yaxis_title="센서 값",
-        height=400,
-        showlegend=True
-    )
-    
-    return fig
-
-def create_pipeline_flowchart():
-    """파이프라인 플로우차트 생성"""
-    fig = go.Figure()
-    
-    # 노드 정의
-    nodes = [
-        {'id': 'input', 'x': 0, 'y': 0, 'label': '입력 데이터\n(52개 센서)'},
-        {'id': 'model1', 'x': 2, 'y': 0, 'label': 'Model1\nFault 탐지 + 분류'},
-        {'id': 'normal', 'x': 4, 'y': 1, 'label': '정상 상태\n→ 종료'},
-        {'id': 'model2', 'x': 2, 'y': -1, 'label': 'Model2\n조작 변수 정상화'},
-        {'id': 'model3', 'x': 4, 'y': -1, 'label': 'Model3\n반응 변수 예측'},
-        {'id': 'model4', 'x': 6, 'y': -1, 'label': 'Model4\n정상 여부 재분류'},
-        {'id': 'success', 'x': 8, 'y': 0, 'label': '정상화 완료'},
-        {'id': 'retry', 'x': 6, 'y': -2, 'label': '재시도\n(최대 3회)'}
-    ]
-    
-    # 엣지 정의
-    edges = [
-        ('input', 'model1'),
-        ('model1', 'normal'),
-        ('model1', 'model2'),
-        ('model2', 'model3'),
-        ('model3', 'model4'),
-        ('model4', 'success'),
-        ('model4', 'retry'),
-        ('retry', 'model2')
-    ]
-    
-    # 노드 그리기
-    for node in nodes:
-        fig.add_trace(go.Scatter(
-            x=[node['x']], y=[node['y']],
-            mode='markers+text',
-            marker=dict(size=50, color='lightblue'),
-            text=node['label'].split('\n'),
-            textposition="middle center",
-            showlegend=False,
-            hoverinfo='text'
-        ))
-    
-    # 엣지 그리기
-    for edge in edges:
-        start_node = next(n for n in nodes if n['id'] == edge[0])
-        end_node = next(n for n in nodes if n['id'] == edge[1])
-        
-        fig.add_trace(go.Scatter(
-            x=[start_node['x'], end_node['x']],
-            y=[start_node['y'], end_node['y']],
-            mode='lines',
-            line=dict(color='gray', width=2),
-            showlegend=False,
-            hoverinfo='skip'
-        ))
-    
-    fig.update_layout(
-        title="TEP 4단계 파이프라인 플로우",
-        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-        height=500,
-        showlegend=False
-    )
-    
-    return fig
-
 def run_tep_pipeline(data: np.ndarray):
     """TEP 파이프라인 실행"""
     try:
         # 파이프라인 초기화
         pipeline = TEPPipeline()
-        
         # 파이프라인 실행
         results = pipeline.run_full_pipeline(data)
-        
-        return results
+        return results, pipeline  # pipeline 객체도 반환
     except Exception as e:
         st.error(f"파이프라인 실행 오류: {e}")
-        return None
+        return None, None
 
 def display_results(results: Dict[str, Any]):
     """결과 표시"""
@@ -333,45 +221,6 @@ def download_large_file():
         print("✅ Downloaded normal_db.npy")
     else:
         print("✅ File already exists")
-
-def plot_raw_time_series_with_fault_marker(data: np.ndarray, fault_time: int = None, sensors: list = None, title: str = "원본 시계열 데이터 (슬라이딩 윈도우)"):
-    """
-    4600개 시점의 원본 시계열 데이터를 센서별로 시각화하고, fault_time에 vertical line을 표시
-    Args:
-        data: (B, 50, 52) 형태의 원본 데이터
-        fault_time: 결함 발생 시점 (슬라이딩 윈도우 인덱스, 0~4599)
-        sensors: 시각화할 센서 인덱스 리스트 (기본: 0~4)
-        title: 그래프 제목
-    Returns:
-        plotly.graph_objects.Figure
-    """
-    # (B, 50, 52) -> (4600, 52)
-    B, T, S = data.shape
-    data_2d = data.reshape(B * T, S)
-    if sensors is None:
-        sensors = list(range(min(5, S)))  # 기본 5개 센서
-    colors = px.colors.qualitative.Set1
-    fig = go.Figure()
-    for i, s in enumerate(sensors):
-        fig.add_trace(go.Scatter(
-            x=list(range(data_2d.shape[0])),
-            y=data_2d[:, s],
-            mode='lines',
-            name=f'센서 {s+1}',
-            line=dict(color=colors[i % len(colors)])
-        ))
-    if fault_time is not None:
-
-        fig.add_vline(x=fault_time, line_width=2, line_dash="dash", line_color="blue",
-                      annotation_text="Fault 발생", annotation_position="top right")
-    fig.update_layout(
-        title=title,
-        xaxis_title="슬라이딩 윈도우 시점 (0~4599)",
-        yaxis_title="센서 값",
-        height=420,
-        showlegend=True
-    )
-    return fig
 
 def plot_single_m_change(original_data, normalized_m, m_index, fault_time, height=600):
     """
@@ -549,7 +398,7 @@ def main():
                             status_text.markdown(f"<div style='text-align:center; font-size:0.97rem; margin-bottom:0.1rem;'>{step}</div>", unsafe_allow_html=True)
                             progress_bar.progress((i + 1) * 25)
                             time.sleep(1.1)
-                        results = run_tep_pipeline(data)
+                        results, pipeline = run_tep_pipeline(data)  # pipeline 객체도 받음
                         progress_bar.progress(100)
                         status_text.markdown("")  # 진행 단계 텍스트 지우기
                         progress_bar.empty()  # 프로그레스 바 완전히 제거
@@ -558,20 +407,23 @@ def main():
                         # 결과를 세션 상태에 저장
                         st.session_state['tep_results'] = results
                         st.session_state['tep_input_data'] = data
-                        # Model2 Top3 인덱스도 저장
-                        if results is not None and results.get('normalized_m') is not None:
-                            pipeline = TEPPipeline()
-                            model2_results = pipeline.model2_module.get_results_for_llm(data, results.get('model1_fault_time', 0))
-                            st.session_state['model2_top3_indices'] = model2_results.get('top3_indices', [41, 42, 43])
+                        # Model2 Top3 인덱스/통계도 저장 (정상화가 반영된 pipeline 사용)
+                        if results is not None and results.get('normalized_m') is not None and pipeline is not None:
+                            model2_llm_result = pipeline.model2_module.get_results_for_llm(
+                                pipeline.original_input_data, pipeline.first_fault_time)
+                            st.session_state['model2_top3_indices'] = model2_llm_result.get('top3_indices', [41, 42, 43])
+                            st.session_state['model2_top3_stats'] = model2_llm_result.get('stats', {})
                     
     with tab3:
         # --- 파이프라인 실행 결과 기반 Model2 Top3 조작 변수 변화 시각화 ---
         if 'tep_results' in st.session_state and st.session_state['tep_results'] is not None:
             results = st.session_state['tep_results']
             input_data = st.session_state.get('tep_input_data', None)
+            # 아래에서 Top3 인덱스/통계는 세션에 저장된 값을 사용
+            top3_indices = st.session_state.get('model2_top3_indices', [41, 42, 43])
+            top3_stats = st.session_state.get('model2_top3_stats', {})
             if results.get('normalized_m') is not None and input_data is not None:
                 fault_time = results.get('model1_fault_time', None)
-                top3_indices = st.session_state.get('model2_top3_indices', [41, 42, 43])
                 st.markdown('<h3 style="text-align:center; margin-top:1.2rem;">Model2 정상화 전후 Top3 조작 변수 변화</h3>', unsafe_allow_html=True)
 
                 # 세션 상태에 현재 인덱스 저장
@@ -702,6 +554,9 @@ def main():
                     nav_html += f'<span class="carousel-dot {active}"></span>'
                 nav_html += '</div>'
                 st.markdown(nav_html, unsafe_allow_html=True)
+                # Top3 통계도 아래에 출력 (원하면)
+                st.write('Model2 Top3 indices:', top3_indices)
+                st.write('Model2 mean_delta:', top3_stats)
 
 if __name__ == "__main__":
     main() 

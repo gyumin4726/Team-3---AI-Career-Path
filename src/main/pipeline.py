@@ -45,6 +45,8 @@ class TEPPipeline:
         self.predicted_x = None
         self.final_class = None
         self.data_path = data_path
+        self.original_input_data = None  # 파이프라인 최초 입력 저장용
+        self.first_fault_time = None     # 최초 fault_time 저장용
         
         # Model1 모듈 초기화
         self.model1_module = Model1Module()
@@ -73,12 +75,19 @@ class TEPPipeline:
         print("="*60)
         print(f"입력 데이터 형태: {data_sequence.shape}")
         
+        # 최초 입력 저장 (반복에도 불구하고 최초 입력만 저장)
+        if self.original_input_data is None:
+            self.original_input_data = data_sequence.copy()
+        
         # 1단계: Fault 시점 탐지 + Fault 종류 분류 (Model1)
         model1_results = self.model1_module.detect_fault(data_sequence)
         fault_time = model1_results.get('fault_time')
         fault_class = model1_results.get('fault_class')
         model1_original_fault_time = model1_results.get('original_fault_time')  # 원본 시점
         model1_fault_class = model1_results.get('fault_class')  # 최초 결함 유형
+        # 최초 fault_time 저장
+        if self.first_fault_time is None:
+            self.first_fault_time = fault_time
         
         # Model1 결과에 따른 분기 처리
         if fault_class == "정상":
@@ -119,17 +128,19 @@ class TEPPipeline:
             
             # Model1 결과를 Model2용으로 변환 (슬라이딩 윈도우 인덱스)
             model1_result = self.model1_module.get_results_for_model2()
-            fault_time = model1_result['fault_time']  # 0~4599 범위
+            # 항상 최초 fault_time 사용
+            fault_time = self.first_fault_time
             
             # 2단계: 조작 변수 정상화 (Model2)
             if self.model2_module is not None:
                 print("Model2: 조작 변수 정상화 시작...")
                 model2_results = self.model2_module.normalize_after_fault(
                     model1_output=data_sequence,
-                    fault_time=fault_time,
+                    fault_time=self.first_fault_time,
                     k=5,
                     method='mean',
-                    data_path=self.data_path
+                    data_path=self.data_path,
+                    original_input_data=self.original_input_data  # 최초 입력 명시적으로 전달
                 )
                 normalized_m = model2_results['M']  # 조작 변수 (11개)
                 normalized_x = model2_results['X']  # 반응 변수 (41개)
@@ -149,7 +160,8 @@ class TEPPipeline:
             
             # 4단계: 정상 여부 재분류 (Model4 = Model1 재사용)
             model4_results = self.model1_module.detect_fault(predicted_data)
-            fault_time = model4_results.get('fault_time')
+            # 정상화 반복 중에도 항상 최초 fault_time 사용
+            fault_time = self.first_fault_time
             final_class = model4_results.get('fault_class')
             
             # Model4 결과에 따른 분기 처리
@@ -163,7 +175,7 @@ class TEPPipeline:
                     f"Model1 결과를 설명해주세요: {model1_results}"
                 )
                 
-                model2_results = self.get_model2_results_for_llm(data_sequence, fault_time)
+                model2_results = self.get_model2_results_for_llm(data_sequence, self.first_fault_time)
                 model2_explanation = self.llm.generate_response(
                     f"Model2 결과를 설명해주세요: {model2_results}"
                 )
@@ -215,7 +227,7 @@ class TEPPipeline:
             f"Model1 결과를 설명해주세요: {model1_results}"
         )
         
-        model2_results = self.get_model2_results_for_llm(data_sequence, fault_time)
+        model2_results = self.get_model2_results_for_llm(data_sequence, self.first_fault_time)
         model2_explanation = self.llm.generate_response(
             f"Model2 결과를 설명해주세요: {model2_results}"
         )
