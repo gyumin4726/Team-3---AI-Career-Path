@@ -202,6 +202,9 @@ def display_results(results: Dict[str, Any]):
     if 'llm_explanations' in results:
         st.markdown('<h3 style="text-align:center; margin-top:1.2rem;">🤖 AI 분석 설명</h3>', unsafe_allow_html=True)
         explanations = results['llm_explanations']
+        if 'all' in explanations:
+            with st.expander("AI 분석 설명", expanded=True):
+                st.write(explanations['all'])
         if 'model1' in explanations:
             with st.expander("Model1 (Fault 탐지 + 분류) 분석", expanded=False):
                 st.write(explanations['model1'])
