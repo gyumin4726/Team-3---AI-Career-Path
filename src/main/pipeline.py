@@ -157,7 +157,7 @@ class TEPPipeline:
             if final_class == "정상":
                 print(f"반복 {current_iteration}: 정상화 완료!")
                 
-                # LLM에게 Model1, Model2, Model3 결과 전달
+                # LLM에게 Model1, Model2, Model3, Model4 결과 전달
                 model1_results = self.get_model1_results_for_llm()
                 model1_explanation = self.llm.generate_response(
                     f"Model1 결과를 설명해주세요: {model1_results}"
@@ -173,6 +173,11 @@ class TEPPipeline:
                     f"Model3 결과를 설명해주세요: {model3_results}"
                 )
                 
+                model4_results = self.get_model4_results_for_llm(final_class, current_iteration)
+                model4_explanation = self.llm.generate_response(
+                    f"Model4 결과를 설명해주세요: {model4_results}"
+                )
+                
                 results = {
                     'fault_time': fault_time,  # LLM용 원본 시점 (0~959)
                     'fault_class': fault_class,
@@ -185,7 +190,8 @@ class TEPPipeline:
                     'llm_explanations': {
                         'model1': model1_explanation,
                         'model2': model2_explanation,
-                        'model3': model3_explanation
+                        'model3': model3_explanation,
+                        'model4': model4_explanation
                     },
                     'model1_fault_time': model1_original_fault_time,  # 모델1의 원본 결함 시점
                     'model1_fault_class': model1_fault_class,         # 최초 결함 유형
@@ -203,7 +209,7 @@ class TEPPipeline:
         # 최대 반복 횟수 초과
         print(f"최대 반복 횟수({max_iterations}) 초과 - 정상화 실패")
         
-        # LLM에게 Model1, Model2, Model3 결과 전달
+        # LLM에게 Model1, Model2, Model3, Model4 결과 전달
         model1_results = self.get_model1_results_for_llm()
         model1_explanation = self.llm.generate_response(
             f"Model1 결과를 설명해주세요: {model1_results}"
@@ -219,6 +225,11 @@ class TEPPipeline:
             f"Model3 결과를 설명해주세요: {model3_results}"
         )
         
+        model4_results = self.get_model4_results_for_llm(final_class, max_iterations)
+        model4_explanation = self.llm.generate_response(
+            f"Model4 결과를 설명해주세요: {model4_results}"
+        )
+        
         results = {
             'fault_time': fault_time,  # LLM용 원본 시점 (0~959)
             'fault_class': fault_class,
@@ -231,7 +242,8 @@ class TEPPipeline:
             'llm_explanations': {
                 'model1': model1_explanation,
                 'model2': model2_explanation,
-                'model3': model3_explanation
+                'model3': model3_explanation,
+                'model4': model4_explanation
             },
             'model1_fault_time': model1_original_fault_time,  # 모델1의 원본 결함 시점
             'model1_fault_class': model1_fault_class,         # 최초 결함 유형
@@ -285,6 +297,24 @@ class TEPPipeline:
             Model3 LLM용 결과 딕셔너리
         """
         return self.model3_module.get_results_for_llm(original_sequence, fault_time)
+
+    def get_model4_results_for_llm(self, final_class: str, iterations: int) -> Dict[str, Any]:
+        """
+        Model4의 결과를 LLM에게 전달하기 위한 형태로 반환합니다.
+        
+        Args:
+            final_class: 최종 분류 결과
+            iterations: 반복 횟수
+            
+        Returns:
+            Model4 LLM용 결과 딕셔너리
+        """
+        return {
+            'final_class': final_class,
+            'iterations': iterations,
+            'success': final_class == "정상",
+            'pipeline_status': 'normalized' if final_class == "정상" else 'failed'
+        }
 
 def main():
     """메인 실행 함수"""
