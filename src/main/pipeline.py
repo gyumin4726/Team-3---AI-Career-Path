@@ -168,28 +168,22 @@ class TEPPipeline:
             print(f"최종 분류 = '{final_class}'")
             if final_class == "정상":
                 print(f"반복 {current_iteration}: 정상화 완료!")
-                
-                # LLM에게 Model1, Model2, Model3, Model4 결과 전달
-                model1_results = self.get_model1_results_for_llm()
-                model1_explanation = self.llm.generate_response(
-                    f"Model1 결과를 설명해주세요: {model1_results}"
-                )
-                
+                # Model1 결과는 반드시 최초 입력 기준으로 다시 추론
+                model1_results = self.model1_module.detect_fault(self.original_input_data)
+                model1_results_llm = self.model1_module.get_results_for_llm()
                 model2_results = self.get_model2_results_for_llm(data_sequence, self.first_fault_time)
-                model2_explanation = self.llm.generate_response(
-                    f"Model2 결과를 설명해주세요: {model2_results}"
-                )
-                
-                model3_results = self.get_model3_results_for_llm(data_sequence, fault_time)
-                model3_explanation = self.llm.generate_response(
-                    f"Model3 결과를 설명해주세요: {model3_results}"
-                )
-                
+                model3_results = self.get_model3_results_for_llm(data_sequence, self.first_fault_time)
                 model4_results = self.get_model4_results_for_llm(final_class, current_iteration)
-                model4_explanation = self.llm.generate_response(
-                    f"Model4 결과를 설명해주세요: {model4_results}"
+                # 각 모델 요약을 하나의 프롬프트로 합침
+                summary_lines = []
+                summary_lines.append(f"[Model1 결과]\n{model1_results_llm}")
+                summary_lines.append(f"[Model2 결과]\n{model2_results}")
+                summary_lines.append(f"[Model3 결과]\n{model3_results}")
+                summary_lines.append(f"[Model4 결과]\n{model4_results}")
+                all_model_summary = '\n\n'.join(summary_lines)
+                all_model_explanation = self.llm.generate_response(
+                    f"아래는 TEP 파이프라인 각 모델의 결과 요약입니다. 전체 공정 상태와 정상화 과정을 통합적으로 설명해줘:\n\n{all_model_summary}"
                 )
-                
                 results = {
                     'fault_time': fault_time,  # LLM용 원본 시점 (0~959)
                     'fault_class': fault_class,
@@ -200,10 +194,7 @@ class TEPPipeline:
                     'pipeline_status': f'normalized_after_iteration_{current_iteration}',
                     'iterations': current_iteration,
                     'llm_explanations': {
-                        'model1': model1_explanation,
-                        'model2': model2_explanation,
-                        'model3': model3_explanation,
-                        'model4': model4_explanation
+                        'all': all_model_explanation
                     },
                     'model1_fault_time': model1_original_fault_time,  # 모델1의 원본 결함 시점
                     'model1_fault_class': model1_fault_class,         # 최초 결함 유형
@@ -220,28 +211,21 @@ class TEPPipeline:
         
         # 최대 반복 횟수 초과
         print(f"최대 반복 횟수({max_iterations}) 초과 - 정상화 실패")
-        
-        # LLM에게 Model1, Model2, Model3, Model4 결과 전달
-        model1_results = self.get_model1_results_for_llm()
-        model1_explanation = self.llm.generate_response(
-            f"Model1 결과를 설명해주세요: {model1_results}"
-        )
-        
+        # Model1 결과는 반드시 최초 입력 기준으로 다시 추론
+        model1_results = self.model1_module.detect_fault(self.original_input_data)
+        model1_results_llm = self.model1_module.get_results_for_llm()
         model2_results = self.get_model2_results_for_llm(data_sequence, self.first_fault_time)
-        model2_explanation = self.llm.generate_response(
-            f"Model2 결과를 설명해주세요: {model2_results}"
-        )
-        
-        model3_results = self.get_model3_results_for_llm(data_sequence, fault_time)
-        model3_explanation = self.llm.generate_response(
-            f"Model3 결과를 설명해주세요: {model3_results}"
-        )
-        
+        model3_results = self.get_model3_results_for_llm(data_sequence, self.first_fault_time)
         model4_results = self.get_model4_results_for_llm(final_class, max_iterations)
-        model4_explanation = self.llm.generate_response(
-            f"Model4 결과를 설명해주세요: {model4_results}"
+        summary_lines = []
+        summary_lines.append(f"[Model1 결과]\n{model1_results_llm}")
+        summary_lines.append(f"[Model2 결과]\n{model2_results}")
+        summary_lines.append(f"[Model3 결과]\n{model3_results}")
+        summary_lines.append(f"[Model4 결과]\n{model4_results}")
+        all_model_summary = '\n\n'.join(summary_lines)
+        all_model_explanation = self.llm.generate_response(
+            f"아래는 TEP 파이프라인 각 모델의 결과 요약입니다. 전체 공정 상태와 정상화 과정을 통합적으로 설명해줘:\n\n{all_model_summary}"
         )
-        
         results = {
             'fault_time': fault_time,  # LLM용 원본 시점 (0~959)
             'fault_class': fault_class,
@@ -252,16 +236,12 @@ class TEPPipeline:
             'pipeline_status': 'max_iterations_exceeded',
             'iterations': max_iterations,
             'llm_explanations': {
-                'model1': model1_explanation,
-                'model2': model2_explanation,
-                'model3': model3_explanation,
-                'model4': model4_explanation
+                'all': all_model_explanation
             },
             'model1_fault_time': model1_original_fault_time,  # 모델1의 원본 결함 시점
             'model1_fault_class': model1_fault_class,         # 최초 결함 유형
             'final_fault_class': final_class                  # 정상화 후 결함 유형
         }
-        
         print("="*60)
         print("파이프라인 완료! (정상화 실패)")
         return results

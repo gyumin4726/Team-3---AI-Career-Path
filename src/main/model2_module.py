@@ -460,6 +460,8 @@ class Model2Module:
                 'summary': str
             }
         """
+        from src.LLM.LLM import get_variable_maps
+        _, m_map = get_variable_maps()
         # 항상 최초 입력과 정상화 결과를 비교
         normalized_sequence = self.results.get('normalized_sequence', original_sequence)
         original_input = self.results.get('original_sequence', original_sequence)
@@ -467,21 +469,25 @@ class Model2Module:
         top3_indices = summary_data['top3_indices']
         stats = summary_data['stats']
 
+        # 인덱스 → 설명 변환
+        top3_desc = []
+        for idx in top3_indices:
+            m_idx = idx - 41 + 1  # m41~m51 → m1~m11
+            desc = m_map.get(m_idx, f"m{m_idx}")
+            top3_desc.append(desc)
+
         # 간단한 요약 설명 생성
         summary_lines = [
-            f"fault_time={fault_time} 이후 정상화된 조작 변수(M)의 변화가 큰 Top 3 변수는 {top3_indices}입니다.",
+            f"fault_time={fault_time} 이후 정상화된 조작 변수(M)의 변화가 큰 Top 3 변수는 {', '.join(top3_desc)}입니다.",
         ]
-        for idx in top3_indices:
+        for i, idx in enumerate(top3_indices):
             s = stats[idx]
+            m_idx = idx - 41 + 1
+            desc = m_map.get(m_idx, f"m{m_idx}")
             summary_lines.append(
-                f"  - 변수 {idx}: fault 이전 평균={s['before_mean']:.3f}, fault 이후 정상화 평균={s['after_mean']:.3f}, 변화량 평균={s['delta_mean']:.3f}, 변화량 최대={s['delta_max']:.3f}"
+                f"  - {desc}: fault 이전 평균={s['before_mean']:.3f}, fault 이후 정상화 평균={s['after_mean']:.3f}, 변화량 평균={s['delta_mean']:.3f}, 변화량 최대={s['delta_max']:.3f}"
             )
         summary = '\n'.join(summary_lines)
-
-        # 정상화 직후 mean_delta 출력 (디버깅용 로그 삭제)
-        # summary_data = self.summarize_top3_m_changes(normalized_sequence, original_input, fault_time)
-        # import streamlit as st
-        # st.write('[get_results_for_llm] mean_delta:', summary_data.get('mean_delta', '없음'))
 
         return {
             'top3_indices': top3_indices,

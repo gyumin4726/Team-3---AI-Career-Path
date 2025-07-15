@@ -258,24 +258,30 @@ class Model3Module:
                 'summary': str
             }
         """
+        from src.LLM.LLM import get_variable_maps
+        x_map, _ = get_variable_maps()
         predicted_sequence = self.results['predicted_sequence']
         summary_data = self.summarize_top3_x_changes(predicted_sequence, original_sequence, fault_time)
         top3_indices = summary_data['top3_indices']
         stats = summary_data['stats']
 
-        # 디버깅용 출력 제거
-        # import streamlit as st
-        # st.write('[Model3][get_results_for_llm] Top3 indices:', top3_indices)
-        # st.write('[Model3][get_results_for_llm] Top3 stats:', stats)
+        # 인덱스 → 설명 변환
+        top3_desc = []
+        for idx in top3_indices:
+            x_idx = idx + 1  # 0~40 → x1~x41
+            desc = x_map.get(x_idx, f"x{x_idx}")
+            top3_desc.append(desc)
 
         # 간단한 요약 설명 생성
         summary_lines = [
-            f"fault_time={fault_time} 이후 예측된 반응 변수(X)의 변화가 큰 Top 3 변수는 {top3_indices}입니다.",
+            f"fault_time={fault_time} 이후 예측된 반응 변수(X)의 변화가 큰 Top 3 변수는 {', '.join(top3_desc)}입니다.",
         ]
-        for idx in top3_indices:
+        for i, idx in enumerate(top3_indices):
             s = stats[idx]
+            x_idx = idx + 1
+            desc = x_map.get(x_idx, f"x{x_idx}")
             summary_lines.append(
-                f"  - 변수 {idx}: fault 이전 평균={s['before_mean']:.3f}, fault 이후 예측 평균={s['after_mean']:.3f}, 변화량 평균={s['delta_mean']:.3f}, 변화량 최대={s['delta_max']:.3f}"
+                f"  - {desc}: fault 이전 평균={s['before_mean']:.3f}, fault 이후 예측 평균={s['after_mean']:.3f}, 변화량 평균={s['delta_mean']:.3f}, 변화량 최대={s['delta_max']:.3f}"
             )
         summary = '\n'.join(summary_lines)
 
