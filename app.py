@@ -184,7 +184,7 @@ def display_results(results: Dict[str, Any]):
         st.markdown('</div>', unsafe_allow_html=True)
     with col4:
         success = results.get('success', False)
-        status = "✅ 성공" if success else "❌ 실패"
+        status = "성공" if success else "❌ 실패"
         st.markdown('<div class="metric-card compact-metric">', unsafe_allow_html=True)
         st.markdown(f'<div class="metric-title">정상화 상태</div><div class="metric-value">{status}</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
@@ -218,9 +218,9 @@ def download_large_file():
     if not os.path.exists(output_path):
         os.makedirs("data", exist_ok=True)
         gdown.download(url, output_path, quiet=False)
-        print("✅ Downloaded normal_db.npy")
+        print("Downloaded normal_db.npy")
     else:
-        print("✅ File already exists")
+        print("File already exists")
 
 def plot_single_m_change(original_data, normalized_m, m_index, fault_time, height=600):
     """
@@ -277,10 +277,9 @@ def plot_single_m_change(original_data, normalized_m, m_index, fault_time, heigh
 
     fig.update_layout(
         height=height,
-        xaxis_title="슬라이딩 윈도우 시점 (0~4599)",
+        xaxis_title="슬라이딩 윈우 시점 (0~4599)",
         yaxis_title="조작 변수 값 (%)",
         showlegend=True,
-        title=m_name
     )
     return fig
 
@@ -374,7 +373,7 @@ def main():
             data = np.load(selected_path)
             st.markdown(
                 f'<div style="text-align:center; font-size:1.13rem; font-weight:600; color:#219150; margin:1rem 0 1.2rem 0;">'
-                f'✅ {selected_label} 시뮬레이션 로드 완료'
+                f'{selected_label} 시뮬레이션 로드 완료'
                 f'</div>', unsafe_allow_html=True)
         except Exception as e:
             st.error(f"데이터 로드 오류: {e}")
@@ -482,11 +481,11 @@ def main():
                     ))
                     if fault_time is not None and isinstance(fault_time, (int, float)):
                         fault_time = original_time_to_window_index(fault_time, 50, 10)
-                        fig.add_vline(x=int(fault_time), line_width=2, line_dash="dash", line_color="blue",
+                        fig.add_vline(x=int(fault_time), line_width=2, line_dash="dash", line_color="red",
                                       annotation_text="이상 발생 시점", annotation_position="top right")
                     fig.update_layout(
                         height=height,
-                        xaxis_title="슬라이딩 윈도우 시점 (0~4599)",
+                        xaxis_title="시뮬레이션 시점 (0~4599)",
                         yaxis_title="조작 변수 값 (%)",
                         showlegend=True,
                         title=m_name
@@ -554,11 +553,6 @@ def main():
                     nav_html += f'<span class="carousel-dot {active}"></span>'
                 nav_html += '</div>'
                 st.markdown(nav_html, unsafe_allow_html=True)
-                # Top3 통계도 아래에 출력 (원하면)
-                st.write('Model2 Top3 indices:', top3_indices)
-                st.write('Model2 mean_delta:', top3_stats)
-                st.write('Model3 Top3 indices:', top3_indices_m3)
-                st.write('Model3 mean_delta:', top3_stats_m3)
 
                 # --- Model3 캐러셀 ---
                 st.markdown('<h3 style="text-align:center; margin-top:2.5rem;">Model3 예측 전후 Top3 반응 변수 변화</h3>', unsafe_allow_html=True)
@@ -568,7 +562,49 @@ def main():
                 idx_m3 = max(0, min(idx_m3, 2))
                 st.session_state['current_plot_idx_m3'] = idx_m3
                 def plot_single_x_change(original_data, predicted_x, x_index, fault_time, height=600):
-                    x_names = {i: f"X{i+1}" for i in range(41)}
+                    x_names = {
+                        0: "x1: A 피드 스트림",
+                        1: "x2: D 피드 스트림",
+                        2: "x3: E 피드 스트림",
+                        3: "x4: 총 신선 피드 스트리퍼",
+                        4: "x5: 반응기 순환 유량",
+                        5: "x6: 반응기 피드율",
+                        6: "x7: 반응기 압력",
+                        7: "x8: 반응기 레벨",
+                        8: "x9: 반응기 온도",
+                        9: "x10: 퍼지율",
+                        10: "x11: 분리기 온도",
+                        11: "x12: 분리기 레벨",
+                        12: "x13: 분리기 압력",
+                        13: "x14: 분리기 하부 유출",
+                        14: "x15: 스트리퍼 레벨",
+                        15: "x16: 스트리퍼 압력",
+                        16: "x17: 스트리퍼 하부 유출",
+                        17: "x18: 스트리퍼 온도",
+                        18: "x19: 스트리퍼 증기 유량",
+                        19: "x20: 압축기 일량",
+                        20: "x21: 반응기 냉각수 출구 온도",
+                        21: "x22: 응축기 냉각수 출구 온도",
+                        22: "x23: 반응기 피드 A 조성",
+                        23: "x24: 반응기 피드 B 조성",
+                        24: "x25: 반응기 피드 C 조성",
+                        25: "x26: 반응기 피드 D 조성",
+                        26: "x27: 반응기 피드 E 조성",
+                        27: "x28: 반응기 피드 F 조성",
+                        28: "x29: 퍼지 A 조성",
+                        29: "x30: 퍼지 B 조성",
+                        30: "x31: 퍼지 C 조성",
+                        31: "x32: 퍼지 D 조성",
+                        32: "x33: 퍼지 E 조성",
+                        33: "x34: 퍼지 F 조성",
+                        34: "x35: 퍼지 G 조성",
+                        35: "x36: 퍼지 H 조성",
+                        36: "x37: 제품 D 조성",
+                        37: "x38: 제품 E 조성",
+                        38: "x39: 제품 F 조성",
+                        39: "x40: 제품 G 조성",
+                        40: "x41: 제품 H 조성"
+                    }
                     B, T, S = original_data.shape
                     orig_x = original_data[:, :, :41]
                     pred_x = predicted_x[:, :, :41]
@@ -601,10 +637,9 @@ def main():
                                       annotation_text="이상 발생 시점", annotation_position="top right")
                     fig.update_layout(
                         height=height,
-                        xaxis_title="슬라이딩 윈도우 시점 (0~4599)",
+                        xaxis_title="시뮬레이션 시점 (0~4599)",
                         yaxis_title="반응 변수 값",
                         showlegend=True,
-                        title=x_name
                     )
                     return fig
                 st.markdown('<div class="carousel-outer">', unsafe_allow_html=True)
