@@ -143,6 +143,12 @@ html, body, [class*="css"]  {
 </style>
 """, unsafe_allow_html=True)
 
+def original_time_to_window_index(original_time, window_size, step_size):
+    window_num = original_time // step_size
+    timestep_in_window = original_time % step_size
+    window_index = window_num * window_size + timestep_in_window
+    return window_index
+
 def load_sample_data():
     """샘플 데이터 로드"""
     try:
@@ -419,10 +425,7 @@ def plot_single_m_change(original_data, normalized_m, m_index, fault_time, heigh
         legendgroup='norm',
         showlegend=True
     ))
-    # fault_time은 이미 슬라이딩 윈도우 인덱스이므로 변환 없이 바로 사용
-    if fault_time is not None and isinstance(fault_time, (int, float)):
-        fig.add_vline(x=int(fault_time*5), line_width=2, line_dash="dash", line_color="red",
-                      annotation_text="이상 발생", annotation_position="top right")
+
     fig.update_layout(
         height=height,
         xaxis_title="슬라이딩 윈도우 시점 (0~4599)",
@@ -622,7 +625,8 @@ def main():
                     ))
                     # fault_time은 이미 슬라이딩 윈도우 인덱스이므로 변환 없이 바로 사용
                     if fault_time is not None and isinstance(fault_time, (int, float)):
-                        fig.add_vline(x=int(fault_time*5), line_width=2, line_dash="dash", line_color="blue",
+                        fault_time = original_time_to_window_index(fault_time, 50, 10)
+                        fig.add_vline(x=int(fault_time), line_width=2, line_dash="dash", line_color="blue",
                                       annotation_text="이상 발생 시점", annotation_position="top right")
                     fig.update_layout(
                         height=height,
