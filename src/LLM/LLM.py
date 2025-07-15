@@ -15,6 +15,62 @@ except (ImportError, KeyError):
 
 import google.generativeai as genai
 from typing import Dict, List, Tuple, Any
+import re
+
+# 변수명-설명 매핑 유틸 함수
+_x_var_map = None
+_m_var_map = None
+
+def get_variable_maps():
+    global _x_var_map, _m_var_map
+    if _x_var_map is not None and _m_var_map is not None:
+        return _x_var_map, _m_var_map
+    # dataset_prompt.txt 경로
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    prompt_path = os.path.join(current_dir, 'prompts', 'dataset_prompt.txt')
+    x_map = {}
+    m_map = {}
+    if os.path.exists(prompt_path):
+        with open(prompt_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+        # 조작 변수(m)
+        m_section = False
+        x_section = False
+        for line in lines:
+            line = line.strip()
+            if line.startswith('조작 변수 (m)'):
+                m_section = True
+                x_section = False
+                continue
+            if line.startswith('반응 변수 (x)'):
+                x_section = True
+                m_section = False
+                continue
+            if m_section and line.startswith('- m'):
+                m = re.match(r'- (m\d+): ([^\(]+)\(([^\)]+)\)', line)
+                if m:
+                    idx = int(m.group(1)[1:])
+                    name = m.group(2).strip()
+                    desc = m.group(3).strip()
+                    m_map[idx] = f"m{idx}: {name}({desc})"
+            if x_section and line.startswith('- x'):
+                m = re.match(r'- (x\d+): ([^\(]+)\(([^\)]+)\)', line)
+                if m:
+                    idx = int(m.group(1)[1:])
+                    name = m.group(2).strip()
+                    desc = m.group(3).strip()
+                    x_map[idx] = f"x{idx}: {name}({desc})"
+                else:
+                    # x10, x21, x22 등 단위만 있는 경우
+                    m2 = re.match(r'- (x\d+): ([^\[]+)\[([^\]]+)\]', line)
+                    if m2:
+                        idx = int(m2.group(1)[1:])
+                        name = m2.group(2).strip()
+                        desc = m2.group(3).strip()
+                        x_map[idx] = f"x{idx}: {name} [{desc}]"
+    _x_var_map = x_map
+    _m_var_map = m_map
+    return x_map, m_map
 
 class LLM:
     def __init__(self):
@@ -46,14 +102,14 @@ class LLM:
                 extra_system = self.load_prompt_from_file(system_prompt_file)
                 system_message += "\n\n" + extra_system
             full_prompt = system_message + "\n\n" + prompt
-            try:
-                import streamlit as st
-                st.write('---')
-                st.write('**[LLM 디버그] 실제 전달 프롬프트:**')
-                st.write(full_prompt)
-                st.write('---')
-            except Exception:
-                pass
+            #try:
+            #    import streamlit as st
+            #    st.write('---')
+            #    st.write('**[LLM 디버그] 실제 전달 프롬프트:**')
+            #    st.write(full_prompt)
+            #    st.write('---')
+            #except Exception:
+            #    pass
             response = self.model.generate_content([
                 {"role": "user", "parts": [full_prompt]}
             ])
