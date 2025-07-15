@@ -4,22 +4,74 @@
 TEP는 다양한 원료(feed), 순환/폐기, 반응기, 분리기, 스트리퍼 등의 계통으로 구성되며,  
 조작 변수(m)의 값에 따라 반응 변수(x)가 변화해.  
 
+📌 TEP 공정 과정 개요:
+
+TEP는 총 8개의 화학 성분으로 구성되어 있습니다: 4개의 반응물, 2개의 생성물, 1개의 부산물, 그리고 1개의 불활성 성분입니다. 이 성분들은 다음의 5가지 주요 공정 유닛에 의해 지배되는 화학 공정을 거칩니다:
+
+1. **반응기**: 기체 상태의 원료 성분들(A, C, D, E)이 액체 생성물(G와 H)로 반응하는 것을 가능하게 함
+2. **응축기**: 반응기에서 나오는 기체 생성물 스트림을 냉각시킴
+3. **가스-액체 분리기**: 냉각된 생성물 스트림에서 기체와 액체 성분을 분리함
+4. **원심 압축기**: 이 기체 스트림을 다시 반응기로 보내 흐르게 함
+5. **스트리퍼**: 미반응 원료 성분들로부터 두 개의 생성물을 효율적으로 분리함
+
+또한 시스템으로부터 불활성 성분(B)과 부산물(F)을 제거하기 위해 퍼지가 존재합니다.
+
+📌 공정 흐름 순서:
+
+**1단계: 원료 공급**
+- A, C, D, E 원료가 반응기로 공급됨
+- 각 원료의 유량은 밸브로 조절됨
+
+**2단계: 반응**
+- 반응기에서 기체 상태의 원료 성분(A, C, D, E)이 발열 반응을 통해 액체 생성물(G, H)로 전환됨
+- 반응 온도, 압력, 레벨이 모니터링됨
+- 반응기 냉각수로 온도 조절
+
+**3단계: 응축**
+- 반응기 출구의 고온 기체가 응축기로 이동
+- 냉각수로 기체를 냉각시켜 일부를 액체로 응축
+- 응축기 출구 온도 모니터링
+
+**4단계: 분리**
+- 응축된 혼합물이 분리기로 이동
+- 기체와 액체 성분이 분리됨
+- 분리기 온도, 압력, 레벨 모니터링
+
+**5단계: 순환**
+- 분리된 기체는 압축기로 이동
+- 압축된 기체는 다시 반응기로 순환
+- 압축기 일량 모니터링
+
+**6단계: 퍼지**
+- 불필요한 기체(B, F)는 퍼지로 배출
+- 퍼지율 모니터링
+
+**7단계: 제품 분리**
+- 분리된 액체는 스트리퍼로 이동
+- 스트리퍼에서 미반응 원료와 생성물 분리
+- 스트리퍼 온도, 압력, 레벨 모니터링
+
+**8단계: 제품 출하**
+- 최종 제품(G, H)이 시스템에서 배출됨
+
+이러한 순환 구조로 인해 공정이 지속적으로 운영되며, 각 단계에서의 변수 변화가 전체 시스템에 영향을 미칩니다.
+
 아래는 각각의 변수 정의와 단위야:
 
 ────────────────────────────────────────────
 📌 조작 변수 (m) – 시스템을 제어하는 밸브 개방 비율 (%)
 
-- m1: D feed valve (액상 D 주입량 조절)
-- m2: E feed valve
-- m3: A feed valve
-- m4: A & C feed valve
-- m5: Compressor recycle valve
-- m6: Purge valve
-- m7: Separator underflow valve
-- m8: Stripper underflow valve
-- m9: Stripper steam valve
-- m10: Reactor cooling-water valve
-- m11: Condenser cooling-water valve
+- m1: D_feed_flow_valve (D 피드 유량 밸브)
+- m2: E_feed_flow_valve (E 피드 유량 밸브)
+- m3: A_feed_flow_valve (A 피드 유량 밸브)
+- m4: Total_feed_flow_stripper_valve (총 피드 스트리퍼 유량 밸브)
+- m5: Compressor_recycle_valve (압축기 순환 밸브)
+- m6: Purge_valve (퍼지 밸브)
+- m7: Separator_pot_liquid_flow_valve (분리기 액체 유출 밸브)
+- m8: Stripper_liquid_product_flow_valve (스트리퍼 액체 제품 유출 밸브)
+- m9: Stripper_steam_valve (스트리퍼 증기 밸브)
+- m10: Reactor_cooling_water_flow_valve (반응기 냉각수 유량 밸브)
+- m11: Condenser_cooling_water_flow_valve (응축기 냉각수 유량 밸브)
 
 단위: 모두 % (밸브 개방률)
 
@@ -27,43 +79,59 @@ TEP는 다양한 원료(feed), 순환/폐기, 반응기, 분리기, 스트리퍼
 📌 반응 변수 (x) – 조작 결과로 시스템에서 관측되는 값
 
 원료 Feed
-- x1: A feed (가스 A 유입량) [kscmh]
-- x2: D feed (액상 D 유입량) [kg/h]
-- x3: E feed (액상 E 유입량) [kg/h]
-- x4: A & C feed (혼합가스) [kscmh]
+- x1: A_feed_stream (A 피드 스트림) [kscmh]
+- x2: D_feed_stream (D 피드 스트림) [kg/h]
+- x3: E_feed_stream (E 피드 스트림) [kg/h]
+- x4: Total_fresh_feed_stripper (총 신선 피드 스트리퍼) [kscmh]
 
 순환·폐기
-- x5: Recycle flow [kscmh]
-- x10: Purge flow [kscmh]
+- x5: Recycle_flow_into_rxtr (반응기 순환 유량) [kscmh]
+- x10: Purge_rate (퍼지율) [kscmh]
 
 반응기
-- x6: Reactor feed rate [kscmh]
-- x7: Reactor pressure [kPa (g)]
-- x8: Reactor level [%]
-- x9: Reactor temperature [°C]
-- x21: Reactor cooling-water outlet T [°C]
+- x6: Reactor_feed_rate (반응기 피드율) [kscmh]
+- x7: Reactor_pressure (반응기 압력) [kPa (g)]
+- x8: Reactor_level (반응기 레벨) [%]
+- x9: Reactor_temp (반응기 온도) [°C]
+- x21: Reactor_cooling_water_outlet_temp (반응기 냉각수 출구 온도) [°C]
 
 컴프레서
-- x20: Compressor work [kW]
+- x20: Compressor_work (압축기 일량) [kW]
 
 분리기
-- x11: Separator temperature [°C]
-- x12: Separator level [%]
-- x13: Separator pressure [kPa (g)]
-- x14: Separator underflow [m³/h]
-- x22: Separator cooling-water outlet T [°C]
+- x11: Separator_temp (분리기 온도) [°C]
+- x12: Separator_level (분리기 레벨) [%]
+- x13: Separator_pressure (분리기 압력) [kPa (g)]
+- x14: Separator_underflow (분리기 하부 유출) [m³/h]
+- x22: Condenser_cooling_water_outlet_temp (응축기 냉각수 출구 온도) [°C]
 
 스트리퍼
-- x15: Stripper level [%]
-- x16: Stripper pressure [kPa (g)]
-- x17: Stripper underflow [m³/h]
-- x18: Stripper temperature [°C]
-- x19: Stripper steam flow [kg/h]
+- x15: Stripper_level (스트리퍼 레벨) [%]
+- x16: Stripper_pressure (스트리퍼 압력) [kPa (g)]
+- x17: Stripper_underflow (스트리퍼 하부 유출) [m³/h]
+- x18: Stripper_temperature (스트리퍼 온도) [°C]
+- x19: Stripper_steam_flow (스트리퍼 증기 유량) [kg/h]
 
 조성 정보
-- x23~x28: A~F의 mole % in reactor feed
-- x29~x36: A~H의 mole % in purge gas
-- x37~x41: D~H의 mole % in product
+- x23: Composition_of_A_rxtr_feed (반응기 피드 A 조성) (A의 mole % in reactor feed)
+- x24: Composition_of_B_rxtr_feed (반응기 피드 B 조성) (B의 mole % in reactor feed)
+- x25: Composition_of_C_rxtr_feed (반응기 피드 C 조성) (C의 mole % in reactor feed)
+- x26: Composition_of_D_rxtr_feed (반응기 피드 D 조성) (D의 mole % in reactor feed)
+- x27: Composition_of_E_rxtr_feed (반응기 피드 E 조성) (E의 mole % in reactor feed)
+- x28: Composition_of_F_rxtr_feed (반응기 피드 F 조성) (F의 mole % in reactor feed)
+- x29: Composition_of_A_purge (퍼지 A 조성) (A의 mole % in purge gas)
+- x30: Composition_of_B_purge (퍼지 B 조성) (B의 mole % in purge gas)
+- x31: Composition_of_C_purge (퍼지 C 조성) (C의 mole % in purge gas)
+- x32: Composition_of_D_purge (퍼지 D 조성) (D의 mole % in purge gas)
+- x33: Composition_of_E_purge (퍼지 E 조성) (E의 mole % in purge gas)
+- x34: Composition_of_F_purge (퍼지 F 조성) (F의 mole % in purge gas)
+- x35: Composition_of_G_purge (퍼지 G 조성) (G의 mole % in purge gas)
+- x36: Composition_of_H_purge (퍼지 H 조성) (H의 mole % in purge gas)
+- x37: Composition_of_D_product (제품 D 조성) (D의 mole % in product)
+- x38: Composition_of_E_product (제품 E 조성) (E의 mole % in product)
+- x39: Composition_of_F_product (제품 F 조성) (F의 mole % in product)
+- x40: Composition_of_G_product (제품 G 조성) (G의 mole % in product)
+- x41: Composition_of_H_product (제품 H 조성) (H의 mole % in product)
 
 ────────────────────────────────────────────
 
@@ -71,9 +139,9 @@ TEP는 다양한 원료(feed), 순환/폐기, 반응기, 분리기, 스트리퍼
 
 - [조작 변수 m1~m11] --(조작/제어)--> [반응 변수 x1~x41] --(관측/결과)--> [제품 품질]
 - 예시:
-    - m1(D feed valve) → x2(D feed 유입량) → x6(Reactor feed rate) → x9(Reactor temperature)
-    - m10(Reactor cooling-water valve) → x21(Reactor cooling-water outlet T) → x9(Reactor temperature)
-    - m11(Condenser cooling-water valve) → x22(Separator cooling-water outlet T) → x11(Separator temperature)
+    - m1(D_feed_flow_valve) → x2(D_feed_stream) → x6(Reactor_feed_rate) → x9(Reactor_temp)
+    - m10(Reactor_cooling_water_flow_valve) → x21(Reactor_cooling_water_outlet_temp) → x9(Reactor_temp)
+    - m11(Condenser_cooling_water_flow_valve) → x22(Condenser_cooling_water_outlet_temp) → x11(Separator_temp)
 - 각 조작 변수(m)는 여러 반응 변수(x)에 영향을 미치며, 반응 변수들은 서로 연쇄적으로 영향을 주고받음
 
 이 그래프 구조를 참고하여, 변수 변화가 전체 시스템에 미치는 영향을 단계별로 설명할 수 있음

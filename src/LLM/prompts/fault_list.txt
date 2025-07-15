@@ -2,19 +2,19 @@
 
 # 결함 유형 설명:
 # - Step: 갑작스럽게 값이 변하는 이상 (예: 한 순간에 값이 확 바뀜)
-# - Random Walk: 점진적이고 누적적으로 값이 변하는 이상 (예: 서서히, 불규칙하게 변화)
+# - Random Variation: 점진적이고 누적적으로 값이 변하는 이상 (예: 서서히, 불규칙하게 변화)
 
-1. Fault 1: 피드 A와 C의 비율에 갑작스러운 이상이 발생하며, B 성분은 일정하게 유지됩니다. (유형: Step)
-2. Fault 2: B 성분의 조성에 갑작스러운 이상이 발생하지만, A와 C의 비율은 일정하게 유지됩니다. (유형: Step)
-3. Fault 3: D 피드(원료)의 온도에 갑작스러운 이상이 발생합니다. (유형: Step)
-4. Fault 4: 반응기 냉각수의 온도에 갑작스러운 이상이 발생합니다. (유형: Step)
-5. Fault 5: 응축기 냉각수의 온도에 갑작스러운 이상이 발생합니다. (유형: Step)
-6. Fault 6: A 피드(원료)가 갑작스럽게 손실되는 이상이 발생합니다. (유형: Step)
-7. Fault 7: C 피드(원료)가 갑작스럽게 손실되는 이상이 발생합니다. (유형: Step)
-8. Fault 8: A 및 C 피드의 조성이 갑작스럽게 변화하는 이상이 발생합니다. (유형: Step)
-9. Fault 9: D 피드(원료)의 온도가 점진적이고 누적적으로 변화합니다. (유형: Random Walk)
-10. Fault 10: C 피드(원료)의 온도가 점진적이고 누적적으로 변화합니다. (유형: Random Walk)
-11. Fault 11: 반응기 냉각수의 유량이 점진적으로, 서서히 감소합니다. (유형: Random Walk)
-12. Fault 12: 응축기 냉각수의 유량이 점진적으로, 서서히 감소합니다. (유형: Random Walk)
+1. Fault 1: A/C feed ratio, B composition constant (유형: Step)
+2. Fault 2: B composition, A/C ratio constant (유형: Step)
+3. Fault 3: D feed temperature (유형: Step)
+4. Fault 4: Reactor cooling water inlet temperature (유형: Step)
+5. Fault 5: Condenser cooling water inlet temperature (유형: Step)
+6. Fault 6: A feed loss (유형: Step)
+7. Fault 7: C header pressure loss (유형: Step)
+8. Fault 8: A, B, C feed composition (유형: Step)
+9. Fault 9: D feed temperature (유형: Random Variation)
+10. Fault 10: C feed temperature (유형: Random Variation)
+11. Fault 11: Reactor cooling water inlet temperature (유형: Random Variation)
+12. Fault 12: Condenser cooling water inlet temperature (유형: Random Variation)
 
 # 이 리스트는 LLM이 각 결함의 의미와 변화를 쉽게 이해할 수 있도록 작성되었습니다. 
