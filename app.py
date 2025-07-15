@@ -328,6 +328,110 @@ def download_large_file():
     else:
         print("✅ File already exists")
 
+def plot_raw_time_series_with_fault_marker(data: np.ndarray, fault_time: int = None, sensors: list = None, title: str = "원본 시계열 데이터 (슬라이딩 윈도우)"):
+    """
+    4600개 시점의 원본 시계열 데이터를 센서별로 시각화하고, fault_time에 vertical line을 표시
+    Args:
+        data: (B, 50, 52) 형태의 원본 데이터
+        fault_time: 결함 발생 시점 (슬라이딩 윈도우 인덱스, 0~4599)
+        sensors: 시각화할 센서 인덱스 리스트 (기본: 0~4)
+        title: 그래프 제목
+    Returns:
+        plotly.graph_objects.Figure
+    """
+    # (B, 50, 52) -> (4600, 52)
+    B, T, S = data.shape
+    data_2d = data.reshape(B * T, S)
+    if sensors is None:
+        sensors = list(range(min(5, S)))  # 기본 5개 센서
+    colors = px.colors.qualitative.Set1
+    fig = go.Figure()
+    for i, s in enumerate(sensors):
+        fig.add_trace(go.Scatter(
+            x=list(range(data_2d.shape[0])),
+            y=data_2d[:, s],
+            mode='lines',
+            name=f'센서 {s+1}',
+            line=dict(color=colors[i % len(colors)])
+        ))
+    if fault_time is not None:
+
+        fig.add_vline(x=fault_time, line_width=2, line_dash="dash", line_color="blue",
+                      annotation_text="Fault 발생", annotation_position="top right")
+    fig.update_layout(
+        title=title,
+        xaxis_title="슬라이딩 윈도우 시점 (0~4599)",
+        yaxis_title="센서 값",
+        height=420,
+        showlegend=True
+    )
+    return fig
+
+def plot_single_m_change(original_data, normalized_m, m_index, fault_time, height=600):
+    """
+    Model2 정상화 전후 변화가 큰 Top3 조작 변수의 시계열을 비교 시각화
+    Args:
+        original_data: (B, 50, 52) 원본 데이터
+        normalized_m: (B, 50, 11) 정상화된 조작 변수
+        m_index: 실제 변수 인덱스(41~51)
+        fault_time: 결함 발생 시점(슬라이딩 윈도우 인덱스)
+    Returns:
+        plotly.graph_objects.Figure
+    """
+    # 조작 변수명 매핑
+    m_names = {
+        41: "m1: D 피드 유량 밸브",
+        42: "m2: E 피드 유량 밸브", 
+        43: "m3: A 피드 유량 밸브",
+        44: "m4: 총 피드 스트리퍼 유량 밸브",
+        45: "m5: 압축기 순환 밸브",
+        46: "m6: 퍼지 밸브",
+        47: "m7: 분리기 액체 유출 밸브",
+        48: "m8: 스트리퍼 액체 제품 유출 밸브",
+        49: "m9: 스트리퍼 증기 밸브",
+        50: "m10: 반응기 냉각수 유량 밸브",
+        51: "m11: 응축기 냉각수 유량 밸브"
+    }
+    
+    B, T, S = original_data.shape
+    orig_m = original_data[:, :, 41:]  # (B, 50, 11)
+    orig_m_2d = orig_m.reshape(B * T, 11)
+    norm_m_2d = normalized_m.reshape(B * T, 11)
+    m_idx = m_index - 41  # 0~10
+    m_name = m_names.get(m_index, f"조작 변수 {m_index}")
+    colors = px.colors.qualitative.Set1
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=list(range(orig_m_2d.shape[0])),
+        y=orig_m_2d[:, m_idx],
+        mode='lines',
+        name=f'원본 {m_name}',
+        line=dict(color=colors[0]),
+        legendgroup='orig',
+        showlegend=True
+    ))
+    fig.add_trace(go.Scatter(
+        x=list(range(norm_m_2d.shape[0])),
+        y=norm_m_2d[:, m_idx],
+        mode='lines',
+        name=f'정상화 {m_name}',
+        line=dict(color=colors[1]),
+        legendgroup='norm',
+        showlegend=True
+    ))
+    # fault_time은 이미 슬라이딩 윈도우 인덱스이므로 변환 없이 바로 사용
+    if fault_time is not None and isinstance(fault_time, (int, float)):
+        fig.add_vline(x=int(fault_time*5), line_width=2, line_dash="dash", line_color="red",
+                      annotation_text="이상 발생", annotation_position="top right")
+    fig.update_layout(
+        height=height,
+        xaxis_title="슬라이딩 윈도우 시점 (0~4599)",
+        yaxis_title="조작 변수 값 (%)",
+        showlegend=True,
+        title=m_name
+    )
+    return fig
+
 # 다운로드 수행
 # Streamlit 앱 실행 시 항상 먼저 체크
 
@@ -448,6 +552,152 @@ def main():
                         progress_bar.empty()  # 프로그레스 바 완전히 제거
                         execution_status.markdown('<div style="text-align:center; font-size:1.02rem; margin-top:0.7rem; margin-bottom:0.3rem;"></div>', unsafe_allow_html=True)
                         display_results(results)
+                        # 결과를 세션 상태에 저장
+                        st.session_state['tep_results'] = results
+                        st.session_state['tep_input_data'] = data
+                        # Model2 Top3 인덱스도 저장
+                        if results is not None and results.get('normalized_m') is not None:
+                            pipeline = TEPPipeline()
+                            model2_results = pipeline.model2_module.get_results_for_llm(data, results.get('model1_fault_time', 0))
+                            st.session_state['model2_top3_indices'] = model2_results.get('top3_indices', [41, 42, 43])
+                    
+    with tab3:
+        # --- 파이프라인 실행 결과 기반 Model2 Top3 조작 변수 변화 시각화 ---
+        if 'tep_results' in st.session_state and st.session_state['tep_results'] is not None:
+            results = st.session_state['tep_results']
+            input_data = st.session_state.get('tep_input_data', None)
+            if results.get('normalized_m') is not None and input_data is not None:
+                fault_time = results.get('model1_fault_time', None)
+                top3_indices = st.session_state.get('model2_top3_indices', [41, 42, 43])
+                st.markdown('<h3 style="text-align:center; margin-top:1.2rem;">Model2 정상화 전후 Top3 조작 변수 변화</h3>', unsafe_allow_html=True)
+
+                # 세션 상태에 현재 인덱스 저장
+                if 'current_plot_idx' not in st.session_state:
+                    st.session_state['current_plot_idx'] = 0
+                idx = st.session_state['current_plot_idx']
+                # 인덱스 범위 제한
+                idx = max(0, min(idx, 2))
+                st.session_state['current_plot_idx'] = idx
+
+                # 단일 subplot만 그리기
+                def plot_single_m_change(original_data, normalized_m, m_index, fault_time, height=600):
+                    m_names = {
+                        41: "m1: D 피드 유량 밸브",
+                        42: "m2: E 피드 유량 밸브",
+                        43: "m3: A 피드 유량 밸브",
+                        44: "m4: 총 피드 스트리퍼 유량 밸브",
+                        45: "m5: 압축기 순환 밸브",
+                        46: "m6: 퍼지 밸브",
+                        47: "m7: 분리기 액체 유출 밸브",
+                        48: "m8: 스트리퍼 액체 제품 유출 밸브",
+                        49: "m9: 스트리퍼 증기 밸브",
+                        50: "m10: 반응기 냉각수 유량 밸브",
+                        51: "m11: 응축기 냉각수 유량 밸브"
+                    }
+                    B, T, S = original_data.shape
+                    orig_m = original_data[:, :, 41:]  # (B, 50, 11)
+                    orig_m_2d = orig_m.reshape(B * T, 11)
+                    norm_m_2d = normalized_m.reshape(B * T, 11)
+                    m_idx = m_index - 41
+                    m_name = m_names.get(m_index, f"조작 변수 {m_index}")
+                    colors = px.colors.qualitative.Set1
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(
+                        x=list(range(orig_m_2d.shape[0])),
+                        y=orig_m_2d[:, m_idx],
+                        mode='lines',
+                        name=f'원본 {m_name}',
+                        line=dict(color=colors[0]),
+                        legendgroup='orig',
+                        showlegend=True
+                    ))
+                    fig.add_trace(go.Scatter(
+                        x=list(range(norm_m_2d.shape[0])),
+                        y=norm_m_2d[:, m_idx],
+                        mode='lines',
+                        name=f'정상화 {m_name}',
+                        line=dict(color=colors[1]),
+                        legendgroup='norm',
+                        showlegend=True
+                    ))
+                    # fault_time은 이미 슬라이딩 윈도우 인덱스이므로 변환 없이 바로 사용
+                    if fault_time is not None and isinstance(fault_time, (int, float)):
+                        fig.add_vline(x=int(fault_time*5), line_width=2, line_dash="dash", line_color="blue",
+                                      annotation_text="이상 발생 시점", annotation_position="top right")
+                    fig.update_layout(
+                        height=height,
+                        xaxis_title="슬라이딩 윈도우 시점 (0~4599)",
+                        yaxis_title="조작 변수 값 (%)",
+                        showlegend=True,
+                        title=m_name
+                    )
+                    return fig
+
+                # 캐러셀 스타일 시각화 UI
+                st.markdown("""
+                <style>
+                .carousel-btn {
+                    position: absolute;
+                    top: 50%;
+                    transform: translateY(-50%);
+                    background: rgba(44,62,80,0.85);
+                    color: #fff;
+                    border: none;
+                    border-radius: 50%;
+                    width: 38px;
+                    height: 38px;
+                    font-size: 1.5rem;
+                    font-weight: bold;
+                    box-shadow: 0 2px 8px rgba(30,80,180,0.13);
+                    cursor: pointer;
+                    z-index: 10;
+                    transition: background 0.2s;
+                }
+                .carousel-btn:disabled {
+                    background: #ccc;
+                    color: #eee;
+                    cursor: not-allowed;
+                }
+                .carousel-dot {
+                    display: inline-block;
+                    width: 13px;
+                    height: 13px;
+                    margin: 0 5px;
+                    background: #bbb;
+                    border-radius: 50%;
+                    transition: background 0.3s;
+                }
+                .carousel-dot.active {
+                    background: #1f77b4;
+                }
+                .carousel-outer {
+                    position: relative;
+                    max-width: 900px;
+                    margin: 0 auto 0.7rem auto;
+                }
+                </style>
+                """, unsafe_allow_html=True)
+                st.markdown('<div class="carousel-outer">', unsafe_allow_html=True)
+                # 좌측 float 버튼
+                col_btn_left, col_graph, col_btn_right = st.columns([1,8,1])
+                with col_btn_left:
+                    st.markdown('<div style="height: 260px;"></div>', unsafe_allow_html=True)  # 버튼 세로 정렬용
+                    if st.button('❮', key='carousel_prev', help='이전', disabled=(idx==0)):
+                        st.session_state['current_plot_idx'] = max(0, idx-1)
+                with col_btn_right:
+                    st.markdown('<div style="height: 260px;"></div>', unsafe_allow_html=True)
+                    if st.button('❯', key='carousel_next', help='다음', disabled=(idx==2)):
+                        st.session_state['current_plot_idx'] = min(2, idx+1)
+                with col_graph:
+                    st.plotly_chart(plot_single_m_change(input_data, results['normalized_m'], top3_indices[idx], fault_time, height=600), use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+                # 동그란 네비게이터
+                nav_html = '<div style="text-align:center; margin-top: 0.5rem;">'
+                for i in range(3):
+                    active = 'active' if i == idx else ''
+                    nav_html += f'<span class="carousel-dot {active}"></span>'
+                nav_html += '</div>'
+                st.markdown(nav_html, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main() 
