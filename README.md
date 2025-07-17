@@ -17,7 +17,7 @@
 
 **주요 특징**
 - 52개 센서 데이터 기반 시계열 분석
-- 12가지 결함 유형 분류 (정상상태 포함)
+- 13가지 결함 유형 분류 (정상상태 포함)
 - 슬라이딩 윈도우 기반 배치 처리 (50, 10)
 - 반복 정상화 파이프라인 (최대 3회)
 - LLM 기반 결과 해설
@@ -98,7 +98,7 @@ Team-3---AI-Career-Path/
 
 **Tennessee Eastman Process 데이터**
 - 센서 개수: 52개 (22개 공정 측정값, 19개 분석 측정값, 11개 조작 변수)
-- 결함 유형: 12가지 (정상상태 포함)
+- 결함 유형: 13가지 (정상상태 포함)
 - 샘플링 주기: 3분
 
 **슬라이딩 윈도우 처리**
@@ -121,7 +121,7 @@ Team-3---AI-Career-Path/
 - **LSTM GENERATOR + CNN1D2D Discriminator** 사용
 - 슬라이딩 윈도우 기반 배치 처리
 - Fault 시점 탐지
-- Fault 종류 분류 (12가지)
+- Fault 종류 분류 (13가지)
 
 ### 2단계: Model2 (조작 변수 정상화)
 - **KNN 기반 보정** 사용
@@ -202,7 +202,7 @@ python -m src.model3.train_model3
   - Discriminator가 더 강력하게 학습될 수 있도록 다양한 시나리오의 데이터를 만듦
 - **CNN1D2D Discriminator**
   - 입력 시계열이 실제인지(Real/Fake) 판별
-  - 동시에 fault 종류(12가지) 분류
+  - 동시에 fault 종류(13가지) 분류
   - 1D Convolution: 시계열 패턴 학습
   - 2D Convolution: 센서 간 상관관계 학습
   - Multitask Learning: 결함 분류 + 실제/가짜 판별
@@ -277,7 +277,7 @@ python -m src.main.pipeline_no_model2
 
 #### **Model1 결과**
 - Fault 발생 시점 탐지
-- 12가지 결함 유형 분류
+- 13가지 결함 유형 분류 (정상상태 포함)
 - 원본 데이터 이상 탐지 결과
 
 #### **Model2 결과**

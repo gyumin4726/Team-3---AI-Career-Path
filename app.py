@@ -323,7 +323,7 @@ def main():
                 <h2 style="font-size: 1.35rem; font-weight: 800; color: #ffc107; margin-bottom: 1rem; letter-spacing:-1px;">데이터셋 정보</h2>
                 <ul style="font-size: 1.05rem; line-height: 2; color: #333; font-weight: 500; text-align: left; margin-left: 1.2em;">
                     <li><b>센서 개수:</b> 52개 (22개 공정, 19개 분석, 11개 조작)</li>
-                    <li><b>결함 유형:</b> 12가지 (정상 포함)</li>
+                    <li><b>결함 유형:</b> 13가지 (정상 포함)</li>
                     <li><b>샘플링 주기:</b> 3분</li>
                     <li><b>슬라이딩 윈도우:</b> 960시점 → 윈도우 50, 스텝 10, 총 4600개</li>
                 </ul>
