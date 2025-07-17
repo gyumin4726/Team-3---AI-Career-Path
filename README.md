@@ -163,13 +163,6 @@ pip install -e .
 
 ### 2. 파이프라인 실행
 
-**메인 파이프라인 실행**
-
-```bash
-# 전체 파이프라인 실행
-python src/main/pipeline.py
-```
-
 **파이프라인 동작 과정**
 1. Model1: Fault 탐지 및 분류
 2. 정상 상태 → 파이프라인 종료
