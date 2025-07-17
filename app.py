@@ -399,7 +399,7 @@ def main():
                         for i, step in enumerate(steps):
                             status_text.markdown(f"<div style='text-align:center; font-size:0.97rem; margin-bottom:0.1rem;'>{step}</div>", unsafe_allow_html=True)
                             progress_bar.progress((i + 1) * 25)
-                            time.sleep(2.0)
+                            time.sleep(8.0)
                         results, pipeline = run_tep_pipeline(data)  # pipeline 객체도 받음
                         progress_bar.progress(100)
                         status_text.markdown("")  # 진행 단계 텍스트 지우기
